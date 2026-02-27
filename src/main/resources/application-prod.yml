@@ -1,0 +1,11 @@
+# 生产环境配置示例。部署时使用 --spring.profiles.active=prod
+spring:
+  datasource:
+    url: jdbc:mysql://${DB_HOST:localhost}:3306/ourcat?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+
+logging:
+  level:
+    root: INFO
+    com.ourcat: INFO
