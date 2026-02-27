@@ -7,9 +7,11 @@ import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
 import javax.validation.Valid;
+import javax.validation.constraints.NotBlank;
 import javax.validation.constraints.NotNull;
 import javax.validation.constraints.Size;
 import java.util.List;
@@ -22,6 +24,7 @@ import java.util.stream.Collectors;
 public class UserController {
 
     private final UserRepository userRepository;
+    private final PasswordEncoder passwordEncoder;
 
     @GetMapping("/profile")
     public ResponseEntity<?> getProfile(@AuthenticationPrincipal UserPrincipal principal) {
@@ -97,6 +100,23 @@ public class UserController {
         return ResponseEntity.ok(toResponse(target));
     }
 
+    @PutMapping("/password")
+    public ResponseEntity<?> changePassword(@AuthenticationPrincipal UserPrincipal principal,
+                                            @Valid @RequestBody ChangePasswordRequest req) {
+        if (principal == null) return ResponseEntity.status(401).body(Map.of("message", "未登录"));
+        User user = userRepository.findById(principal.getUser().getId()).orElse(null);
+        if (user == null) return ResponseEntity.notFound().build();
+        if (!passwordEncoder.matches(req.getOldPassword(), user.getPassword())) {
+            return ResponseEntity.badRequest().body(Map.of("message", "原密码错误"));
+        }
+        if (req.getNewPassword().length() < 6) {
+            return ResponseEntity.badRequest().body(Map.of("message", "新密码至少6位"));
+        }
+        user.setPassword(passwordEncoder.encode(req.getNewPassword()));
+        userRepository.save(user);
+        return ResponseEntity.ok(Map.of("message", "密码修改成功"));
+    }
+
     @Data
     public static class ProfileUpdateRequest {
         @Size(max = 64)
@@ -105,6 +125,14 @@ public class UserController {
         private String avatarUrl;
         @Size(max = 500)
         private String bio;
+    }
+
+    @Data
+    public static class ChangePasswordRequest {
+        @NotBlank
+        private String oldPassword;
+        @NotBlank
+        private String newPassword;
     }
 
     @Data

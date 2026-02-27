@@ -143,6 +143,34 @@ public class ForumService {
         return commentRepository.save(c);
     }
 
+    public Page<Post> searchByComment(String q, int page, int size) {
+        return postRepository.searchByComment(q.trim(), PageRequest.of(page, size));
+    }
+
+    public Page<Comment> searchComments(String q, int page, int size) {
+        return commentRepository.searchByKeyword(q.trim(), PageRequest.of(page, size));
+    }
+
+    public Page<Post> getPostsByUserId(Long userId, int page, int size) {
+        return postRepository.findByUserIdOrderByCreatedAtDesc(userId, PageRequest.of(page, size));
+    }
+
+    public Page<Comment> getCommentsByUserId(Long userId, int page, int size) {
+        return commentRepository.findByUserIdOrderByCreatedAtDesc(userId, PageRequest.of(page, size));
+    }
+
+    @Transactional
+    public boolean deleteComment(Long commentId, Long userId, int userRole) {
+        Optional<Comment> opt = commentRepository.findById(commentId);
+        if (opt.isEmpty()) return false;
+        Comment c = opt.get();
+        if (c.getUserId().equals(userId) || userRole >= 2) {
+            commentRepository.delete(c);
+            return true;
+        }
+        return false;
+    }
+
     public Optional<User> getPostAuthor(Long userId) {
         return userRepository.findById(userId);
     }

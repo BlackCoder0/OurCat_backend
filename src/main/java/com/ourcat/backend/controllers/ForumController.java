@@ -3,10 +3,13 @@ package com.ourcat.backend.controllers;
 import com.ourcat.backend.config.UserPrincipal;
 import com.ourcat.backend.models.Comment;
 import com.ourcat.backend.models.Post;
+import com.ourcat.backend.models.User;
+import com.ourcat.backend.repositories.UserRepository;
 import com.ourcat.backend.services.ForumService;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
@@ -27,6 +30,7 @@ import java.util.stream.Collectors;
 public class ForumController {
 
     private final ForumService forumService;
+    private final UserRepository userRepository;
 
     @GetMapping("/posts")
     public ResponseEntity<Map<String, Object>> listPosts(
@@ -143,6 +147,94 @@ public class ForumController {
         ));
         m.put("authorName", principal.getUser().getNickname() != null ? principal.getUser().getNickname() : principal.getUser().getUsername());
         return ResponseEntity.ok(m);
+    }
+
+    @GetMapping("/search")
+    public ResponseEntity<?> search(
+            @RequestParam String q,
+            @RequestParam(defaultValue = "post") String type,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        if (q == null || q.trim().isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of("message", "搜索关键词不能为空"));
+        }
+        String keyword = q.trim();
+        if ("comment".equals(type)) {
+            Page<Comment> p = forumService.searchComments(keyword, page, size);
+            List<Map<String, Object>> items = p.getContent().stream().map(c -> {
+                Map<String, Object> m = new HashMap<>();
+                m.put("id", c.getId());
+                m.put("content", c.getContent());
+                m.put("postId", c.getPostId());
+                m.put("userId", c.getUserId());
+                m.put("createdAt", c.getCreatedAt() != null ? c.getCreatedAt().toString() : "");
+                forumService.getPostAuthor(c.getUserId()).ifPresent(u ->
+                        m.put("authorName", u.getNickname() != null ? u.getNickname() : u.getUsername()));
+                forumService.getPost(c.getPostId()).ifPresent(post -> m.put("postTitle", post.getTitle()));
+                return m;
+            }).collect(Collectors.toList());
+            return ResponseEntity.ok(Map.of("content", items, "totalPages", p.getTotalPages(), "totalElements", p.getTotalElements()));
+        } else if ("user".equals(type)) {
+            Page<User> p = userRepository.searchByKeyword(keyword, PageRequest.of(page, size));
+            List<Map<String, Object>> items = p.getContent().stream().map(u -> Map.<String, Object>of(
+                    "id", u.getId(),
+                    "username", u.getUsername(),
+                    "nickname", u.getNickname() != null ? u.getNickname() : u.getUsername(),
+                    "avatarUrl", u.getAvatarUrl() != null ? u.getAvatarUrl() : "",
+                    "role", u.getRole()
+            )).collect(Collectors.toList());
+            return ResponseEntity.ok(Map.of("content", items, "totalPages", p.getTotalPages(), "totalElements", p.getTotalElements()));
+        } else {
+            Page<Post> p = forumService.listPosts(page, size, keyword);
+            List<Map<String, Object>> items = p.getContent().stream().map(post -> {
+                Map<String, Object> m = new HashMap<>(postToMap(post));
+                forumService.getPostAuthor(post.getUserId()).ifPresent(u ->
+                        m.put("authorName", u.getNickname() != null ? u.getNickname() : u.getUsername()));
+                return m;
+            }).collect(Collectors.toList());
+            return ResponseEntity.ok(Map.of("content", items, "totalPages", p.getTotalPages(), "totalElements", p.getTotalElements()));
+        }
+    }
+
+    @DeleteMapping("/comments/{commentId}")
+    public ResponseEntity<?> deleteComment(@AuthenticationPrincipal UserPrincipal principal,
+                                           @PathVariable Long commentId) {
+        if (principal == null) return ResponseEntity.status(401).build();
+        boolean ok = forumService.deleteComment(commentId, principal.getUser().getId(), principal.getUser().getRole());
+        if (!ok) return ResponseEntity.status(403).body(Map.of("message", "无权限或评论不存在"));
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/my/posts")
+    public ResponseEntity<?> myPosts(@AuthenticationPrincipal UserPrincipal principal,
+                                     @RequestParam(defaultValue = "0") int page,
+                                     @RequestParam(defaultValue = "20") int size) {
+        if (principal == null) return ResponseEntity.status(401).build();
+        Page<Post> p = forumService.getPostsByUserId(principal.getUser().getId(), page, size);
+        List<Map<String, Object>> items = p.getContent().stream().map(post -> {
+            Map<String, Object> m = new HashMap<>(postToMap(post));
+            m.put("authorName", principal.getUser().getNickname() != null ? principal.getUser().getNickname() : principal.getUser().getUsername());
+            return m;
+        }).collect(Collectors.toList());
+        return ResponseEntity.ok(Map.of("content", items, "totalPages", p.getTotalPages(), "totalElements", p.getTotalElements()));
+    }
+
+    @GetMapping("/my/comments")
+    public ResponseEntity<?> myComments(@AuthenticationPrincipal UserPrincipal principal,
+                                        @RequestParam(defaultValue = "0") int page,
+                                        @RequestParam(defaultValue = "20") int size) {
+        if (principal == null) return ResponseEntity.status(401).build();
+        Page<Comment> p = forumService.getCommentsByUserId(principal.getUser().getId(), page, size);
+        List<Map<String, Object>> items = p.getContent().stream().map(c -> {
+            Map<String, Object> m = new HashMap<>();
+            m.put("id", c.getId());
+            m.put("content", c.getContent());
+            m.put("postId", c.getPostId());
+            m.put("createdAt", c.getCreatedAt() != null ? c.getCreatedAt().toString() : "");
+            forumService.getPost(c.getPostId()).ifPresent(post -> m.put("postTitle", post.getTitle()));
+            return m;
+        }).collect(Collectors.toList());
+        return ResponseEntity.ok(Map.of("content", items, "totalPages", p.getTotalPages(), "totalElements", p.getTotalElements()));
     }
 
     private Map<String, Object> postToMap(Post post) {
