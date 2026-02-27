@@ -29,10 +29,10 @@ ourcat:
     secret: ${JWT_SECRET:ourcat-jwt-secret-change-in-production}
     expiration-ms: ${JWT_EXPIRATION_MS:86400000}
   oss:
-    endpoint: ${OSS_ENDPOINT:oss-cn-hangzhou.aliyuncs.com}
-    bucket: ${OSS_BUCKET:ourcat}
-    access-key-id: ${OSS_ACCESS_KEY_ID:}
-    access-key-secret: ${OSS_ACCESS_KEY_SECRET:}
+    endpoint: REDACTED_OSS_ENDPOINT
+    bucket: ourcat
+    access-key-id: REDACTED_OSS_AK_ID
+    access-key-secret: REDACTED_OSS_AK_SECRET
   qweather:
     api-key: ${QWEATHER_API_KEY:}
   amap:

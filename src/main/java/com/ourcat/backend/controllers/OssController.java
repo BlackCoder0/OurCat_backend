@@ -15,7 +15,8 @@ public class OssController {
     private final OssUtil ossUtil;
 
     /**
-     * Get presigned upload URL. Client will PUT file to uploadUrl, then use publicUrl in APIs.
+     * Get presigned upload URL. Client will PUT file to uploadUrl with header Content-Type: contentType, then use publicUrl in APIs.
+     * Supported content types: image/jpeg, image/jpg, image/png, image/webp, image/gif.
      */
     @GetMapping("/upload-url")
     public ResponseEntity<Map<String, String>> getUploadUrl(
@@ -24,7 +25,8 @@ public class OssController {
         OssUtil.PresignResult result = ossUtil.generateUploadPresign(filename, contentType);
         return ResponseEntity.ok(Map.of(
                 "uploadUrl", result.uploadUrl != null ? result.uploadUrl : "",
-                "publicUrl", result.publicUrl
+                "publicUrl", result.publicUrl,
+                "contentType", result.contentType
         ));
     }
 }
