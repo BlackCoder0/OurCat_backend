@@ -29,7 +29,7 @@ public class Post {
     @Column(columnDefinition = "TEXT")
     private String content;
 
-    @Column(length = 2000)
+    @Column(columnDefinition = "TEXT")
     private String images; // JSON array of URLs
 
     @Column(nullable = false)

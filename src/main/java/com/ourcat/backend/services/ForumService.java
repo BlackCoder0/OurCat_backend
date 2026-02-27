@@ -2,9 +2,11 @@ package com.ourcat.backend.services;
 
 import com.ourcat.backend.models.Comment;
 import com.ourcat.backend.models.Post;
+import com.ourcat.backend.models.PostVote;
 import com.ourcat.backend.models.User;
 import com.ourcat.backend.repositories.CommentRepository;
 import com.ourcat.backend.repositories.PostRepository;
+import com.ourcat.backend.repositories.PostVoteRepository;
 import com.ourcat.backend.repositories.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -24,6 +26,7 @@ public class ForumService {
     private final PostRepository postRepository;
     private final CommentRepository commentRepository;
     private final UserRepository userRepository;
+    private final PostVoteRepository postVoteRepository;
 
     public Page<Post> listPosts(int page, int size, String search) {
         Pageable pageable = PageRequest.of(page, size);
@@ -46,6 +49,9 @@ public class ForumService {
                 .content(content)
                 .images(imagesJson)
                 .userId(userId)
+                .likes(0)
+                .dislikes(0)
+                .pinned(false)
                 .build();
         return postRepository.save(post);
     }
@@ -89,14 +95,39 @@ public class ForumService {
         return true;
     }
 
+    /**
+     * Set or toggle the current user's vote: one vote per user (like or dislike, or none).
+     * If user clicks same again, vote is removed; if opposite, vote is switched.
+     */
     @Transactional
-    public Optional<Post> like(Long postId, boolean like) {
+    public Optional<Post> like(Long userId, Long postId, boolean like) {
         Optional<Post> opt = postRepository.findById(postId);
         if (opt.isEmpty()) return Optional.empty();
+        Optional<PostVote> existing = postVoteRepository.findByUserIdAndPostId(userId, postId);
+        if (existing.isPresent()) {
+            PostVote v = existing.get();
+            if (v.getIsLike() == like) {
+                postVoteRepository.delete(v);
+            } else {
+                v.setIsLike(like);
+                postVoteRepository.save(v);
+            }
+        } else {
+            postVoteRepository.save(new PostVote(userId, postId, like));
+        }
+        int likesCount = (int) postVoteRepository.countLikesByPostId(postId);
+        int dislikesCount = (int) postVoteRepository.countDislikesByPostId(postId);
         Post post = opt.get();
-        if (like) post.setLikes(post.getLikes() + 1);
-        else post.setDislikes(post.getDislikes() + 1);
+        post.setLikes(likesCount);
+        post.setDislikes(dislikesCount);
         return Optional.of(postRepository.save(post));
+    }
+
+    /** Returns current user's vote: 1 = liked, -1 = disliked, 0 = none. */
+    public int getCurrentUserVote(Long userId, Long postId) {
+        return postVoteRepository.findByUserIdAndPostId(userId, postId)
+                .map(v -> v.getIsLike() ? 1 : -1)
+                .orElse(0);
     }
 
     public List<Comment> getComments(Long postId, int page, int size) {

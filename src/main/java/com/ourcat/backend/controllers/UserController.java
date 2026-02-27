@@ -10,8 +10,11 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import javax.validation.Valid;
+import javax.validation.constraints.NotNull;
 import javax.validation.constraints.Size;
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/user")
@@ -56,6 +59,44 @@ public class UserController {
         );
     }
 
+    /**
+     * List all users (role 3 admin only), for role management.
+     */
+    @GetMapping("/list")
+    public ResponseEntity<?> listUsers(@AuthenticationPrincipal UserPrincipal principal) {
+        if (principal == null || principal.getUser().getRole() < 3) {
+            return ResponseEntity.status(403).body(Map.of("message", "仅管理员可操作"));
+        }
+        List<Map<String, Object>> users = userRepository.findAll().stream()
+                .map(this::toResponse)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(users);
+    }
+
+    /**
+     * Role 3 admin grants or revokes role 2 (volunteer) for a user.
+     * Cannot change role 3 users; cannot set role to 3.
+     */
+    @PutMapping("/{id}/role")
+    public ResponseEntity<?> setRole(@AuthenticationPrincipal UserPrincipal principal,
+                                     @PathVariable Long id,
+                                     @Valid @RequestBody RoleChangeRequest req) {
+        if (principal == null || principal.getUser().getRole() < 3) {
+            return ResponseEntity.status(403).body(Map.of("message", "仅管理员可操作"));
+        }
+        if (req.getRole() < 1 || req.getRole() > 2) {
+            return ResponseEntity.badRequest().body(Map.of("message", "只能设置为1(普通用户)或2(志愿者)"));
+        }
+        User target = userRepository.findById(id).orElse(null);
+        if (target == null) return ResponseEntity.notFound().build();
+        if (target.getRole() >= 3) {
+            return ResponseEntity.badRequest().body(Map.of("message", "不能修改管理员角色"));
+        }
+        target.setRole(req.getRole());
+        userRepository.save(target);
+        return ResponseEntity.ok(toResponse(target));
+    }
+
     @Data
     public static class ProfileUpdateRequest {
         @Size(max = 64)
@@ -64,5 +105,11 @@ public class UserController {
         private String avatarUrl;
         @Size(max = 500)
         private String bio;
+    }
+
+    @Data
+    public static class RoleChangeRequest {
+        @NotNull
+        private Integer role;
     }
 }

@@ -3,7 +3,6 @@ package com.ourcat.backend.controllers;
 import com.ourcat.backend.config.UserPrincipal;
 import com.ourcat.backend.models.Comment;
 import com.ourcat.backend.models.Post;
-import com.ourcat.backend.models.User;
 import com.ourcat.backend.services.ForumService;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
@@ -15,6 +14,7 @@ import org.springframework.web.bind.annotation.*;
 import javax.validation.Valid;
 import javax.validation.constraints.NotBlank;
 import javax.validation.constraints.Size;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -34,7 +34,12 @@ public class ForumController {
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(required = false) String search) {
         Page<Post> p = forumService.listPosts(page, size, search);
-        List<Map<String, Object>> items = p.getContent().stream().map(this::postToMap).collect(Collectors.toList());
+        List<Map<String, Object>> items = p.getContent().stream().map(post -> {
+            Map<String, Object> m = new HashMap<>(postToMap(post));
+            forumService.getPostAuthor(post.getUserId()).ifPresent(u ->
+                    m.put("authorName", u.getNickname() != null ? u.getNickname() : u.getUsername()));
+            return m;
+        }).collect(Collectors.toList());
         return ResponseEntity.ok(Map.of(
                 "content", items,
                 "totalPages", p.getTotalPages(),
@@ -43,20 +48,24 @@ public class ForumController {
     }
 
     @GetMapping("/posts/{id}")
-    public ResponseEntity<?> getPost(@PathVariable Long id) {
+    public ResponseEntity<?> getPost(@PathVariable Long id, @AuthenticationPrincipal UserPrincipal principal) {
         Optional<Post> opt = forumService.getPost(id);
         if (opt.isEmpty()) return ResponseEntity.notFound().build();
         Post post = opt.get();
         Map<String, Object> map = new HashMap<>(postToMap(post));
         forumService.getPostAuthor(post.getUserId()).ifPresent(u -> map.put("authorName", u.getNickname() != null ? u.getNickname() : u.getUsername()));
+        if (principal != null && principal.getUser() != null) {
+            map.put("userVote", forumService.getCurrentUserVote(principal.getUser().getId(), id));
+        }
         return ResponseEntity.ok(map);
     }
 
     @PostMapping("/posts")
     public ResponseEntity<?> createPost(@AuthenticationPrincipal UserPrincipal principal,
                                         @Valid @RequestBody PostRequest req) {
-        if (principal == null) return ResponseEntity.status(401).build();
-        Post post = forumService.createPost(principal.getUser().getId(), req.getTitle(), req.getContent(), req.getImages());
+        if (principal == null || principal.getUser() == null) return ResponseEntity.status(401).build();
+        List<String> images = req.getImages() != null ? req.getImages() : new ArrayList<>();
+        Post post = forumService.createPost(principal.getUser().getId(), req.getTitle(), req.getContent(), images);
         return ResponseEntity.ok(postToMap(post));
     }
 
@@ -92,10 +101,14 @@ public class ForumController {
     }
 
     @PostMapping("/posts/{id}/like")
-    public ResponseEntity<?> like(@PathVariable Long id, @RequestParam boolean like) {
-        Optional<Post> opt = forumService.like(id, like);
+    public ResponseEntity<?> like(@PathVariable Long id, @RequestParam boolean like,
+                                   @AuthenticationPrincipal UserPrincipal principal) {
+        if (principal == null || principal.getUser() == null) return ResponseEntity.status(401).build();
+        Optional<Post> opt = forumService.like(principal.getUser().getId(), id, like);
         if (opt.isEmpty()) return ResponseEntity.notFound().build();
-        return ResponseEntity.ok(Map.of("likes", opt.get().getLikes(), "dislikes", opt.get().getDislikes()));
+        Post p = opt.get();
+        int userVote = forumService.getCurrentUserVote(principal.getUser().getId(), id);
+        return ResponseEntity.ok(Map.of("likes", p.getLikes(), "dislikes", p.getDislikes(), "userVote", userVote));
     }
 
     @GetMapping("/posts/{id}/comments")
