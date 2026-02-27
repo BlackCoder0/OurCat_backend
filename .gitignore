@@ -1,8 +1,8 @@
-# Compiled class files
+# Java 编译产物 
 *.class
 
 # Maven
-target/
+/target/
 pom.xml.tag
 pom.xml.releaseBackup
 pom.xml.versionsBackup
@@ -13,11 +13,11 @@ buildNumber.properties
 .mvn/timing.properties
 .mvn/wrapper/maven-wrapper.jar
 
-# Gradle (if switched later)
-.gradle/
-build/
+# Gradle（如果以后切到 Gradle）
+/.gradle/
+**/build/
 
-# IDE
+# IDE / 编辑器
 .idea/
 *.iml
 *.ipr
@@ -27,24 +27,31 @@ build/
 .settings/
 .vscode/
 
-# Logs
+# 日志
 *.log
 logs/
 
-# OS
+# OS 级别杂项
 .DS_Store
 Thumbs.db
 
-# Local / env config (secrets, DB URL, OSS keys)
+# 本地 / 私有配置（不要进仓库）
 application-local.yml
 application-local.yaml
 application-local.properties
 *.local.*
+.env
+*.env
 
-# Spring Boot
+# 常见数据库 / 嵌入式存储文件（如果本地使用 H2 / SQLite 等）
+*.db
+*.mv.db
+*.h2.db
+
+# Spring Boot / 运行时文件
 spring-boot-devtools.properties
 
-# Package files
+# 打包文件
 *.jar
 *.war
 *.nar
@@ -53,6 +60,6 @@ spring-boot-devtools.properties
 *.tar.gz
 *.rar
 
-# Misc
+# 杂项临时文件
 *.swp
 *~
