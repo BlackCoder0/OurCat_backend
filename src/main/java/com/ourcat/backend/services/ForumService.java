@@ -76,6 +76,16 @@ public class ForumService {
         Optional<Post> opt = postRepository.findById(postId);
         if (opt.isEmpty()) return false;
         Post post = opt.get();
+        
+        // 查询帖子作者的角色
+        Optional<User> authorOpt = userRepository.findById(post.getUserId());
+        int authorRole = authorOpt.map(User::getRole).orElse(1);
+        
+        // 如果帖子作者是管理员(role=3)，只有管理员可以删除
+        if (authorRole >= 3 && userRole < 3) {
+            return false;
+        }
+        
         if (post.getUserId().equals(userId) || userRole >= 2) {
             commentRepository.deleteByPostId(postId);
             postRepository.delete(post);
@@ -164,6 +174,16 @@ public class ForumService {
         Optional<Comment> opt = commentRepository.findById(commentId);
         if (opt.isEmpty()) return false;
         Comment c = opt.get();
+        
+        // 查询评论作者的角色
+        Optional<User> authorOpt = userRepository.findById(c.getUserId());
+        int authorRole = authorOpt.map(User::getRole).orElse(1);
+        
+        // 如果评论作者是管理员(role=3)，只有管理员可以删除
+        if (authorRole >= 3 && userRole < 3) {
+            return false;
+        }
+        
         if (c.getUserId().equals(userId) || userRole >= 2) {
             commentRepository.delete(c);
             return true;
