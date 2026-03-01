@@ -58,6 +58,31 @@ public class CatService {
         }).collect(Collectors.toList());
     }
 
+    public List<LocationDto> getMyReports(Long userId) {
+        List<CatReport> reports = catReportRepository.findByUserIdOrderByReportTimeDesc(userId);
+        return reports.stream().map(r -> {
+            LocationDto dto = new LocationDto(r.getId(), r.getLat(), r.getLng(), r.getImageUrl(), r.getDescription(), r.getReportTime() != null ? r.getReportTime().toString() : "", r.getUserId());
+            if (r.getCatId() != null) {
+                catRepository.findById(r.getCatId()).ifPresent(c -> {
+                    dto.setColor(c.getColor());
+                    dto.setFeature(c.getFeature());
+                    dto.setPersonality(c.getPersonality());
+                });
+            }
+            return dto;
+        }).collect(Collectors.toList());
+    }
+
+    @Transactional
+    public boolean deleteReport(Long userId, Long reportId) {
+        Optional<CatReport> opt = catReportRepository.findById(reportId);
+        if (opt.isEmpty()) return false;
+        CatReport report = opt.get();
+        if (!report.getUserId().equals(userId)) return false;
+        catReportRepository.delete(report);
+        return true;
+    }
+
     /** Heatmap: last 30 days, 500m grid (simplified: round lat/lng to 2 decimals as grid key), weight = count. */
     public List<HeatmapPoint> getHeatmap() {
         Instant since = Instant.now().minusSeconds(30L * 24 * 3600);

@@ -8,4 +8,6 @@ import java.util.List;
 public interface CatReportRepository extends JpaRepository<CatReport, Long> {
 
     List<CatReport> findAllByOrderByReportTimeDesc();
+
+    List<CatReport> findByUserIdOrderByReportTimeDesc(Long userId);
 }

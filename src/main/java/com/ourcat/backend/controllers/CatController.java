@@ -59,24 +59,43 @@ public class CatController {
         return ResponseEntity.ok(result);
     }
 
+    @GetMapping("/my-reports")
+    public ResponseEntity<List<Map<String, Object>>> myReports(@AuthenticationPrincipal UserPrincipal principal) {
+        if (principal == null) return ResponseEntity.status(401).build();
+        List<CatService.LocationDto> list = catService.getMyReports(principal.getUser().getId());
+        List<Map<String, Object>> result = list.stream().map(this::dtoToMap).collect(Collectors.toList());
+        return ResponseEntity.ok(result);
+    }
+
+    @DeleteMapping("/reports/{id}")
+    public ResponseEntity<?> deleteReport(@AuthenticationPrincipal UserPrincipal principal,
+                                          @PathVariable Long id) {
+        if (principal == null) return ResponseEntity.status(401).build();
+        boolean ok = catService.deleteReport(principal.getUser().getId(), id);
+        if (ok) return ResponseEntity.ok(Map.of("success", true));
+        return ResponseEntity.status(403).body(Map.of("error", "无权删除或记录不存在"));
+    }
+
     @GetMapping("/locations")
     public ResponseEntity<List<Map<String, Object>>> locations() {
         List<CatService.LocationDto> list = catService.getLocations();
-        List<Map<String, Object>> result = list.stream().map(d -> {
-            Map<String, Object> m = new HashMap<>();
-            m.put("id", d.id);
-            m.put("lat", d.lat);
-            m.put("lng", d.lng);
-            m.put("imageUrl", d.imageUrl != null ? d.imageUrl : "");
-            m.put("description", d.description != null ? d.description : "");
-            m.put("reportTime", d.reportTime != null ? d.reportTime : "");
-            m.put("userId", d.userId);
-            m.put("color", d.color != null ? d.color : "");
-            m.put("feature", d.feature != null ? d.feature : "");
-            m.put("personality", d.personality != null ? d.personality : "");
-            return m;
-        }).collect(Collectors.toList());
+        List<Map<String, Object>> result = list.stream().map(this::dtoToMap).collect(Collectors.toList());
         return ResponseEntity.ok(result);
+    }
+
+    private Map<String, Object> dtoToMap(CatService.LocationDto d) {
+        Map<String, Object> m = new HashMap<>();
+        m.put("id", d.id);
+        m.put("lat", d.lat);
+        m.put("lng", d.lng);
+        m.put("imageUrl", d.imageUrl != null ? d.imageUrl : "");
+        m.put("description", d.description != null ? d.description : "");
+        m.put("reportTime", d.reportTime != null ? d.reportTime : "");
+        m.put("userId", d.userId);
+        m.put("color", d.color != null ? d.color : "");
+        m.put("feature", d.feature != null ? d.feature : "");
+        m.put("personality", d.personality != null ? d.personality : "");
+        return m;
     }
 
     @Data
