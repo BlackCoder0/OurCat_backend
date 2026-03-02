@@ -33,15 +33,18 @@ public class Post {
     private String images; // JSON array of URLs
 
     @Column(nullable = false)
+    @Builder.Default
     private Integer likes = 0;
 
     @Column(nullable = false)
+    @Builder.Default
     private Integer dislikes = 0;
 
     @Column(name = "user_id", nullable = false)
     private Long userId;
 
     @Column(nullable = false)
+    @Builder.Default
     private Boolean pinned = false;
 
     @Column(name = "created_at")

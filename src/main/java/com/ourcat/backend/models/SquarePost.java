@@ -36,9 +36,11 @@ public class SquarePost {
     private String type; // inquiry, rescue
 
     @Column(nullable = false, length = 32)
+    @Builder.Default
     private String status = "open"; // open, resolved
 
     @Column(nullable = false)
+    @Builder.Default
     private Integer likes = 0;
 
     @Column(name = "user_id", nullable = false)

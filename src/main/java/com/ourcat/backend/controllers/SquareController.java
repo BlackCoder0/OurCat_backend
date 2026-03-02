@@ -104,6 +104,15 @@ public class SquareController {
         return ResponseEntity.ok(m);
     }
 
+    @DeleteMapping("/posts/{id}")
+    public ResponseEntity<?> deletePost(@AuthenticationPrincipal UserPrincipal principal,
+                                        @PathVariable Long id) {
+        if (principal == null) return ResponseEntity.status(401).build();
+        boolean ok = squareService.deletePost(id, principal.getUser().getId(), principal.getUser().getRole());
+        if (!ok) return ResponseEntity.status(403).body(Map.of("message", "无权限或帖子不存在"));
+        return ResponseEntity.ok().build();
+    }
+
     private Map<String, Object> postToMap(SquarePost post) {
         return Map.of(
                 "id", post.getId(),

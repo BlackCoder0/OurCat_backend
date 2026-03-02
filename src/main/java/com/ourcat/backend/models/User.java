@@ -27,6 +27,7 @@ public class User {
     private String password;
 
     @Column(nullable = false)
+    @Builder.Default
     private Integer role = 1; // 1=user, 2=volunteer, 3=admin
 
     @Column(length = 64)

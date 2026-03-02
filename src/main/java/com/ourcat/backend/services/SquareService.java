@@ -26,6 +26,9 @@ public class SquareService {
 
     public Page<SquarePost> listPosts(int page, int size, String sort) {
         Pageable pageable = PageRequest.of(page, size);
+        if ("hot".equalsIgnoreCase(sort)) {
+            return squarePostRepository.findAllByOrderByLikesDescCreatedAtDesc(pageable);
+        }
         return squarePostRepository.findAllByOrderByCreatedAtDesc(pageable);
     }
 
@@ -43,6 +46,7 @@ public class SquareService {
                 .location(location)
                 .type(type != null ? type : "inquiry")
                 .status("open")
+                .likes(0) // Explicitly set default value to avoid null
                 .userId(userId)
                 .build();
         return squarePostRepository.save(post);
@@ -54,11 +58,47 @@ public class SquareService {
         if (opt.isEmpty())
             return false;
         SquarePost post = opt.get();
-        if (!post.getUserId().equals(userId) && userRole < 2)
+        // Only author can mark solved
+        if (!post.getUserId().equals(userId))
             return false;
         post.setStatus("resolved");
         squarePostRepository.save(post);
         return true;
+    }
+
+    @Transactional
+    public boolean deletePost(Long postId, Long userId, int userRole) {
+        Optional<SquarePost> opt = squarePostRepository.findById(postId);
+        if (opt.isEmpty())
+            return false;
+        SquarePost post = opt.get();
+
+        // Check author role
+        Optional<com.ourcat.backend.models.User> authorOpt = userRepository.findById(post.getUserId());
+        int authorRole = authorOpt.map(com.ourcat.backend.models.User::getRole).orElse(1);
+
+        // Role 3 (Admin) can delete all
+        if (userRole >= 3) {
+            squarePostRepository.delete(post);
+            return true;
+        }
+
+        // Role 2 (Volunteer) can delete posts by Role 1 and Role 2
+        if (userRole == 2) {
+            if (authorRole <= 2) {
+                squarePostRepository.delete(post);
+                return true;
+            }
+            return false;
+        }
+
+        // Role 1 (User) can only delete their own posts
+        if (post.getUserId().equals(userId)) {
+            squarePostRepository.delete(post);
+            return true;
+        }
+
+        return false;
     }
 
     public List<SquareComment> getComments(Long postId, int page, int size) {
