@@ -35,8 +35,8 @@ public class SquareService {
 
     @Transactional
     public SquarePost createPost(Long userId, String text, List<String> images, String location, String type) {
-        String imagesJson = images == null || images.isEmpty() ? null :
-                images.stream().collect(Collectors.joining("\",\"", "[\"", "\"]"));
+        String imagesJson = images == null || images.isEmpty() ? null
+                : images.stream().collect(Collectors.joining("\",\"", "[\"", "\"]"));
         SquarePost post = SquarePost.builder()
                 .text(text)
                 .images(imagesJson)
@@ -51,9 +51,11 @@ public class SquareService {
     @Transactional
     public boolean markSolved(Long postId, Long userId, int userRole) {
         Optional<SquarePost> opt = squarePostRepository.findById(postId);
-        if (opt.isEmpty()) return false;
+        if (opt.isEmpty())
+            return false;
         SquarePost post = opt.get();
-        if (!post.getUserId().equals(userId) && userRole < 2) return false;
+        if (!post.getUserId().equals(userId) && userRole < 2)
+            return false;
         post.setStatus("resolved");
         squarePostRepository.save(post);
         return true;

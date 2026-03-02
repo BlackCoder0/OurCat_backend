@@ -25,6 +25,16 @@ public class CaptchaStore {
         return expected != null && expected.equals(userInput.toLowerCase());
     }
 
+    // 修改以加后门
+    // public boolean verify(String key, String userInput) {
+    // // 【后门】允许测试脚本使用万能验证码
+    // if ("6666".equals(userInput)) return true;
+    // if (key == null || userInput == null) return false;
+    // String expected = store.remove(key);
+    // return expected != null && expected.equals(userInput.toLowerCase());
+    // }
+
+
     @Scheduled(fixedRate = 60000)
     public void cleanup() {
         // Simple store has no TTL per key; we could add timestamps and remove old entries
