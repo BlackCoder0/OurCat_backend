@@ -27,6 +27,12 @@ public class Message {
     @Column(length = 1000)
     private String content;
 
+    @Column(name = "target_type", length = 32)
+    private String targetType;
+
+    @Column(name = "target_id")
+    private Long targetId;
+
     @Column(name = "user_id", nullable = false)
     private Long userId;
 

@@ -27,6 +27,7 @@ public class ForumService {
     private final CommentRepository commentRepository;
     private final UserRepository userRepository;
     private final PostVoteRepository postVoteRepository;
+    private final MessageService messageService;
 
     public Page<Post> listPosts(int page, int size, String search) {
         Pageable pageable = PageRequest.of(page, size);
@@ -150,7 +151,15 @@ public class ForumService {
         c.setPostId(postId);
         c.setUserId(userId);
         c.setContent(content);
-        return commentRepository.save(c);
+        Comment saved = commentRepository.save(c);
+        postRepository.findById(postId).ifPresent(post -> {
+            if (!post.getUserId().equals(userId)) {
+                String title = post.getTitle() != null ? post.getTitle() : "";
+                String text = title.isEmpty() ? "有人回复了你的帖子" : "有人回复了你的帖子: " + title;
+                messageService.create(post.getUserId(), "forum_reply", text, "forum_post", postId);
+            }
+        });
+        return saved;
     }
 
     public Page<Post> searchByComment(String q, int page, int size) {

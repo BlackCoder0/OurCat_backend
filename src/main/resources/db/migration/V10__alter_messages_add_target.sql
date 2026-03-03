@@ -1,0 +1,2 @@
+ALTER TABLE messages ADD COLUMN target_type VARCHAR(32) NULL;
+ALTER TABLE messages ADD COLUMN target_id BIGINT NULL;

@@ -23,6 +23,7 @@ public class SquareService {
     private final SquarePostRepository squarePostRepository;
     private final SquareCommentRepository squareCommentRepository;
     private final UserRepository userRepository;
+    private final MessageService messageService;
 
     public Page<SquarePost> listPosts(int page, int size, String sort) {
         Pageable pageable = PageRequest.of(page, size);
@@ -63,6 +64,15 @@ public class SquareService {
             return false;
         post.setStatus("resolved");
         squarePostRepository.save(post);
+        List<Long> commenterIds = squareCommentRepository.findDistinctUserIdsBySquarePostId(postId);
+        String snippet = buildSnippet(post.getText());
+        String type = "rescue".equals(post.getType()) ? "rescue_response" : "square_reply";
+        for (Long uid : commenterIds) {
+            if (uid != null && !uid.equals(userId)) {
+                String text = snippet.isEmpty() ? "广播已解决" : "广播已解决: " + snippet;
+                messageService.create(uid, type, text, "square_post", postId);
+            }
+        }
         return true;
     }
 
@@ -111,10 +121,30 @@ public class SquareService {
         c.setSquarePostId(postId);
         c.setUserId(userId);
         c.setContent(content);
-        return squareCommentRepository.save(c);
+        SquareComment saved = squareCommentRepository.save(c);
+        squarePostRepository.findById(postId).ifPresent(post -> {
+            if (!post.getUserId().equals(userId)) {
+                String snippet = buildSnippet(post.getText());
+                String type = "rescue".equals(post.getType()) ? "rescue_response" : "square_reply";
+                String text = snippet.isEmpty() ? "有人回复了你的广播" : "有人回复了你的广播: " + snippet;
+                messageService.create(post.getUserId(), type, text, "square_post", postId);
+            }
+        });
+        return saved;
     }
 
     public Optional<com.ourcat.backend.models.User> getAuthor(Long userId) {
         return userRepository.findById(userId);
+    }
+
+    private String buildSnippet(String text) {
+        if (text == null)
+            return "";
+        String t = text.trim();
+        if (t.isEmpty())
+            return "";
+        if (t.length() <= 20)
+            return t;
+        return t.substring(0, 20) + "...";
     }
 }

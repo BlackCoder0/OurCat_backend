@@ -32,11 +32,17 @@ public class MessageService {
         });
     }
 
-    public void create(Long userId, String type, String content) {
+    public Long create(Long userId, String type, String content) {
+        return create(userId, type, content, null, null);
+    }
+
+    public Long create(Long userId, String type, String content, String targetType, Long targetId) {
         Message m = new Message();
         m.setUserId(userId);
         m.setType(type);
         m.setContent(content);
-        messageRepository.save(m);
+        m.setTargetType(targetType);
+        m.setTargetId(targetId);
+        return messageRepository.save(m).getId();
     }
 }

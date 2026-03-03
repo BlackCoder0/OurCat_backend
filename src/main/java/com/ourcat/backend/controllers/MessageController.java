@@ -33,6 +33,8 @@ public class MessageController {
             map.put("id", m.getId());
             map.put("type", m.getType());
             map.put("content", m.getContent() != null ? m.getContent() : "");
+            map.put("targetType", m.getTargetType());
+            map.put("targetId", m.getTargetId());
             map.put("read", m.getRead());
             map.put("createdAt", m.getCreatedAt() != null ? m.getCreatedAt().toString() : "");
             return map;

@@ -11,8 +11,8 @@ import java.util.Optional;
 @Service
 public class WeatherService {
 
-    @Value("${ourcat.qweather.api-key:}")
-    private String apiKey;
+    @Value("${ourcat.qweather.jwt:}")
+    private String jwt;
 
     private final RestTemplate restTemplate = new RestTemplate();
 
@@ -21,16 +21,24 @@ public class WeatherService {
      */
     @SuppressWarnings("unchecked")
     public Optional<List<String>> getWarnings(double lat, double lng) {
-        if (apiKey == null || apiKey.isEmpty()) {
+        boolean hasJwt = jwt != null && !jwt.isEmpty();
+        if (!hasJwt) {
             return Optional.of(java.util.Collections.emptyList());
         }
         String location = lat + "," + lng;
-        String url = "https://api.qweather.com/v7/warning/now?location=" + location + "&key=" + apiKey;
         try {
-            Map<String, Object> resp = restTemplate.getForObject(url, Map.class);
-            if (resp == null || !"200".equals(resp.get("code"))) return Optional.of(java.util.Collections.emptyList());
+            String url = "https://api.qweather.com/v7/warning/now?location=" + location;
+            org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+            headers.set("Authorization", "Bearer " + jwt);
+            org.springframework.http.HttpEntity<Void> entity = new org.springframework.http.HttpEntity<>(headers);
+            org.springframework.http.ResponseEntity<Map> respEntity = restTemplate.exchange(
+                    url, org.springframework.http.HttpMethod.GET, entity, Map.class);
+            Map<String, Object> resp = respEntity.getBody();
+            if (resp == null || !"200".equals(resp.get("code")))
+                return Optional.of(java.util.Collections.emptyList());
             Object warning = resp.get("warning");
-            if (warning == null) return Optional.of(java.util.Collections.emptyList());
+            if (warning == null)
+                return Optional.of(java.util.Collections.emptyList());
             if (warning instanceof List) {
                 List<Map<String, Object>> list = (List<Map<String, Object>>) warning;
                 return Optional.of(list.stream()
