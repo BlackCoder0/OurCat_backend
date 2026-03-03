@@ -18,4 +18,6 @@ public interface PostRepository extends JpaRepository<Post, Long> {
     Page<Post> searchByComment(@Param("q") String q, Pageable pageable);
 
     Page<Post> findByUserIdOrderByCreatedAtDesc(Long userId, Pageable pageable);
+
+    long countByUserId(Long userId);
 }

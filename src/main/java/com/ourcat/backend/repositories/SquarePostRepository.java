@@ -9,4 +9,6 @@ public interface SquarePostRepository extends JpaRepository<SquarePost, Long> {
 
     Page<SquarePost> findAllByOrderByCreatedAtDesc(Pageable pageable);
     Page<SquarePost> findAllByOrderByLikesDescCreatedAtDesc(Pageable pageable);
+
+    long countByUserId(Long userId);
 }

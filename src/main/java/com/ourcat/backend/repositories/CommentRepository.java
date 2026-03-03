@@ -20,4 +20,6 @@ public interface CommentRepository extends JpaRepository<Comment, Long> {
 
     @Query("SELECT c FROM Comment c WHERE c.content LIKE %:q% ORDER BY c.createdAt DESC")
     Page<Comment> searchByKeyword(@Param("q") String q, Pageable pageable);
+
+    long countByUserId(Long userId);
 }

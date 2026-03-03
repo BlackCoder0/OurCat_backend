@@ -36,24 +36,27 @@ public class SquareController {
         return ResponseEntity.ok(Map.of(
                 "content", items,
                 "totalPages", p.getTotalPages(),
-                "totalElements", p.getTotalElements()
-        ));
+                "totalElements", p.getTotalElements()));
     }
 
     @GetMapping("/posts/{id}")
     public ResponseEntity<?> getPost(@PathVariable Long id) {
         Optional<SquarePost> opt = squareService.getPost(id);
-        if (opt.isEmpty()) return ResponseEntity.notFound().build();
+        if (opt.isEmpty())
+            return ResponseEntity.notFound().build();
         Map<String, Object> map = new HashMap<>(postToMap(opt.get()));
-        squareService.getAuthor(opt.get().getUserId()).ifPresent(u ->
-                map.put("authorName", u.getNickname() != null ? u.getNickname() : u.getUsername()));
+        squareService.getAuthor(opt.get().getUserId()).ifPresent(u -> {
+            map.put("authorName", u.getNickname() != null ? u.getNickname() : u.getUsername());
+            map.put("authorAvatar", u.getAvatarUrl());
+        });
         return ResponseEntity.ok(map);
     }
 
     @PostMapping("/posts")
     public ResponseEntity<?> createPost(@AuthenticationPrincipal UserPrincipal principal,
-                                       @Valid @RequestBody SquarePostRequest req) {
-        if (principal == null) return ResponseEntity.status(401).build();
+            @Valid @RequestBody SquarePostRequest req) {
+        if (principal == null)
+            return ResponseEntity.status(401).build();
         SquarePost post = squareService.createPost(
                 principal.getUser().getId(),
                 req.getText(), req.getImages(), req.getLocation(),
@@ -63,26 +66,31 @@ public class SquareController {
 
     @PostMapping("/posts/{id}/markSolved")
     public ResponseEntity<?> markSolved(@AuthenticationPrincipal UserPrincipal principal,
-                                       @PathVariable Long id) {
-        if (principal == null) return ResponseEntity.status(401).build();
+            @PathVariable Long id) {
+        if (principal == null)
+            return ResponseEntity.status(401).build();
         boolean ok = squareService.markSolved(id, principal.getUser().getId(), principal.getUser().getRole());
-        if (!ok) return ResponseEntity.status(403).body(Map.of("message", "无权限"));
-        return squareService.getPost(id).map(p -> ResponseEntity.ok(postToMap(p))).orElse(ResponseEntity.notFound().build());
+        if (!ok)
+            return ResponseEntity.status(403).body(Map.of("message", "无权限"));
+        return squareService.getPost(id).map(p -> ResponseEntity.ok(postToMap(p)))
+                .orElse(ResponseEntity.notFound().build());
     }
 
     @GetMapping("/posts/{id}/comments")
     public ResponseEntity<List<Map<String, Object>>> getComments(@PathVariable Long id,
-                                                                 @RequestParam(defaultValue = "0") int page,
-                                                                 @RequestParam(defaultValue = "50") int size) {
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "50") int size) {
         List<SquareComment> comments = squareService.getComments(id, page, size);
         List<Map<String, Object>> list = comments.stream().map(c -> {
             Map<String, Object> m = new HashMap<>(Map.of(
                     "id", c.getId(),
                     "content", c.getContent(),
                     "userId", c.getUserId(),
-                    "createdAt", c.getCreatedAt() != null ? c.getCreatedAt().toString() : ""
-            ));
-            squareService.getAuthor(c.getUserId()).ifPresent(u -> m.put("authorName", u.getNickname() != null ? u.getNickname() : u.getUsername()));
+                    "createdAt", c.getCreatedAt() != null ? c.getCreatedAt().toString() : ""));
+            squareService.getAuthor(c.getUserId()).ifPresent(u -> {
+                m.put("authorName", u.getNickname() != null ? u.getNickname() : u.getUsername());
+                m.put("authorAvatar", u.getAvatarUrl());
+            });
             return m;
         }).collect(Collectors.toList());
         return ResponseEntity.ok(list);
@@ -90,26 +98,29 @@ public class SquareController {
 
     @PostMapping("/posts/{id}/comments")
     public ResponseEntity<?> addComment(@AuthenticationPrincipal UserPrincipal principal,
-                                       @PathVariable Long id,
-                                       @Valid @RequestBody CommentRequest req) {
-        if (principal == null) return ResponseEntity.status(401).build();
+            @PathVariable Long id,
+            @Valid @RequestBody CommentRequest req) {
+        if (principal == null)
+            return ResponseEntity.status(401).build();
         SquareComment c = squareService.addComment(id, principal.getUser().getId(), req.getContent());
         Map<String, Object> m = new HashMap<>(Map.of(
                 "id", c.getId(),
                 "content", c.getContent(),
                 "userId", c.getUserId(),
-                "createdAt", c.getCreatedAt() != null ? c.getCreatedAt().toString() : ""
-        ));
-        m.put("authorName", principal.getUser().getNickname() != null ? principal.getUser().getNickname() : principal.getUser().getUsername());
+                "createdAt", c.getCreatedAt() != null ? c.getCreatedAt().toString() : ""));
+        m.put("authorName", principal.getUser().getNickname() != null ? principal.getUser().getNickname()
+                : principal.getUser().getUsername());
         return ResponseEntity.ok(m);
     }
 
     @DeleteMapping("/posts/{id}")
     public ResponseEntity<?> deletePost(@AuthenticationPrincipal UserPrincipal principal,
-                                        @PathVariable Long id) {
-        if (principal == null) return ResponseEntity.status(401).build();
+            @PathVariable Long id) {
+        if (principal == null)
+            return ResponseEntity.status(401).build();
         boolean ok = squareService.deletePost(id, principal.getUser().getId(), principal.getUser().getRole());
-        if (!ok) return ResponseEntity.status(403).body(Map.of("message", "无权限或帖子不存在"));
+        if (!ok)
+            return ResponseEntity.status(403).body(Map.of("message", "无权限或帖子不存在"));
         return ResponseEntity.ok().build();
     }
 
@@ -123,13 +134,13 @@ public class SquareController {
                 "status", post.getStatus(),
                 "likes", post.getLikes(),
                 "userId", post.getUserId(),
-                "createdAt", post.getCreatedAt() != null ? post.getCreatedAt().toString() : ""
-        );
+                "createdAt", post.getCreatedAt() != null ? post.getCreatedAt().toString() : "");
     }
 
     @Data
     public static class SquarePostRequest {
-        @NotBlank private String text;
+        @NotBlank
+        private String text;
         private java.util.List<String> images;
         private String location;
         private String type; // inquiry, rescue
@@ -137,6 +148,7 @@ public class SquareController {
 
     @Data
     public static class CommentRequest {
-        @NotBlank private String content;
+        @NotBlank
+        private String content;
     }
 }

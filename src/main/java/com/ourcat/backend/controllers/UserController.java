@@ -14,6 +14,7 @@ import javax.validation.Valid;
 import javax.validation.constraints.NotBlank;
 import javax.validation.constraints.NotNull;
 import javax.validation.constraints.Size;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -25,6 +26,11 @@ public class UserController {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final com.ourcat.backend.repositories.PostRepository postRepository;
+    private final com.ourcat.backend.repositories.CommentRepository commentRepository;
+    private final com.ourcat.backend.repositories.CatReportRepository catReportRepository;
+    private final com.ourcat.backend.repositories.SquarePostRepository squarePostRepository;
+    private final com.ourcat.backend.repositories.SquareCommentRepository squareCommentRepository;
 
     @GetMapping("/profile")
     public ResponseEntity<?> getProfile(@AuthenticationPrincipal UserPrincipal principal) {
@@ -32,21 +38,49 @@ public class UserController {
             return ResponseEntity.status(401).body(Map.of("message", "未登录"));
         }
         User user = userRepository.findById(principal.getUser().getId()).orElse(null);
-        if (user == null) return ResponseEntity.notFound().build();
+        if (user == null)
+            return ResponseEntity.notFound().build();
         return ResponseEntity.ok(toResponse(user));
+    }
+
+    @GetMapping("/{id}/public-profile")
+    public ResponseEntity<?> getPublicProfile(@PathVariable Long id) {
+        User user = userRepository.findById(id).orElse(null);
+        if (user == null)
+            return ResponseEntity.notFound().build();
+
+        long postCount = postRepository.countByUserId(id);
+        long commentCount = commentRepository.countByUserId(id);
+        long catReportCount = catReportRepository.countByUserId(id);
+        long squarePostCount = squarePostRepository.countByUserId(id);
+        long squareCommentCount = squareCommentRepository.countByUserId(id);
+
+        Map<String, Object> map = new HashMap<>(toResponse(user));
+        map.put("createdAt", user.getCreatedAt());
+        map.put("postCount", postCount + squarePostCount);
+        map.put("commentCount", commentCount + squareCommentCount);
+        map.put("catReportCount", catReportCount);
+        // Also provide breakdown if needed, but for now aggregate is fine as per
+        // request
+        // "发过多少帖子，发过多少评论"
+        return ResponseEntity.ok(map);
     }
 
     @PutMapping("/profile")
     public ResponseEntity<?> updateProfile(@AuthenticationPrincipal UserPrincipal principal,
-                                          @Valid @RequestBody ProfileUpdateRequest req) {
+            @Valid @RequestBody ProfileUpdateRequest req) {
         if (principal == null) {
             return ResponseEntity.status(401).body(Map.of("message", "未登录"));
         }
         User user = userRepository.findById(principal.getUser().getId()).orElse(null);
-        if (user == null) return ResponseEntity.notFound().build();
-        if (req.getNickname() != null) user.setNickname(req.getNickname());
-        if (req.getAvatarUrl() != null) user.setAvatarUrl(req.getAvatarUrl());
-        if (req.getBio() != null) user.setBio(req.getBio());
+        if (user == null)
+            return ResponseEntity.notFound().build();
+        if (req.getNickname() != null)
+            user.setNickname(req.getNickname());
+        if (req.getAvatarUrl() != null)
+            user.setAvatarUrl(req.getAvatarUrl());
+        if (req.getBio() != null)
+            user.setBio(req.getBio());
         user = userRepository.save(user);
         return ResponseEntity.ok(toResponse(user));
     }
@@ -58,8 +92,7 @@ public class UserController {
                 "nickname", user.getNickname() != null ? user.getNickname() : user.getUsername(),
                 "avatarUrl", user.getAvatarUrl() != null ? user.getAvatarUrl() : "",
                 "bio", user.getBio() != null ? user.getBio() : "",
-                "role", user.getRole()
-        );
+                "role", user.getRole());
     }
 
     /**
@@ -82,8 +115,8 @@ public class UserController {
      */
     @PutMapping("/{id}/role")
     public ResponseEntity<?> setRole(@AuthenticationPrincipal UserPrincipal principal,
-                                     @PathVariable Long id,
-                                     @Valid @RequestBody RoleChangeRequest req) {
+            @PathVariable Long id,
+            @Valid @RequestBody RoleChangeRequest req) {
         if (principal == null || principal.getUser().getRole() < 3) {
             return ResponseEntity.status(403).body(Map.of("message", "仅管理员可操作"));
         }
@@ -91,7 +124,8 @@ public class UserController {
             return ResponseEntity.badRequest().body(Map.of("message", "只能设置为1(普通用户)或2(志愿者)"));
         }
         User target = userRepository.findById(id).orElse(null);
-        if (target == null) return ResponseEntity.notFound().build();
+        if (target == null)
+            return ResponseEntity.notFound().build();
         if (target.getRole() >= 3) {
             return ResponseEntity.badRequest().body(Map.of("message", "不能修改管理员角色"));
         }
@@ -102,10 +136,12 @@ public class UserController {
 
     @PutMapping("/password")
     public ResponseEntity<?> changePassword(@AuthenticationPrincipal UserPrincipal principal,
-                                            @Valid @RequestBody ChangePasswordRequest req) {
-        if (principal == null) return ResponseEntity.status(401).body(Map.of("message", "未登录"));
+            @Valid @RequestBody ChangePasswordRequest req) {
+        if (principal == null)
+            return ResponseEntity.status(401).body(Map.of("message", "未登录"));
         User user = userRepository.findById(principal.getUser().getId()).orElse(null);
-        if (user == null) return ResponseEntity.notFound().build();
+        if (user == null)
+            return ResponseEntity.notFound().build();
         if (!passwordEncoder.matches(req.getOldPassword(), user.getPassword())) {
             return ResponseEntity.badRequest().body(Map.of("message", "原密码错误"));
         }

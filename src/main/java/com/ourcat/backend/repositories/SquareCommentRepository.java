@@ -16,4 +16,6 @@ public interface SquareCommentRepository extends JpaRepository<SquareComment, Lo
 
     @Query("select distinct c.userId from SquareComment c where c.squarePostId = :postId")
     List<Long> findDistinctUserIdsBySquarePostId(@Param("postId") Long postId);
+
+    long countByUserId(Long userId);
 }

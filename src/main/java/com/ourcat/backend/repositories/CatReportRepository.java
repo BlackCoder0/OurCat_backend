@@ -10,4 +10,6 @@ public interface CatReportRepository extends JpaRepository<CatReport, Long> {
     List<CatReport> findAllByOrderByReportTimeDesc();
 
     List<CatReport> findByUserIdOrderByReportTimeDesc(Long userId);
+
+    long countByUserId(Long userId);
 }
