@@ -5,42 +5,339 @@ import com.ourcat.backend.models.CatReport;
 import com.ourcat.backend.repositories.CatRepository;
 import com.ourcat.backend.repositories.CatReportRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 
 import java.time.Instant;
 import java.util.*;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class CatService {
 
     private final CatRepository catRepository;
     private final CatReportRepository catReportRepository;
+    
+    private static final double MATCH_RADIUS_KM = 15.0;
+    private static final double FEATURE_MATCH_THRESHOLD = 0.6;
 
+    /**
+     * 上报猫咪 - 新算法：先保存，后异步匹配
+     */
     @Transactional
     public CatReport report(Long userId, double lat, double lng, String imageUrl, String description,
             Long catId, String color, String feature, String personality) {
-        Long resolvedCatId = catId;
-        if (resolvedCatId == null && (color != null || feature != null || personality != null)) {
-            Cat cat = Cat.builder()
-                    .color(color)
-                    .feature(feature)
-                    .personality(personality)
-                    .build();
-            cat = catRepository.save(cat);
-            resolvedCatId = cat.getId();
-        }
+        
         CatReport report = CatReport.builder()
                 .lat(lat)
                 .lng(lng)
                 .imageUrl(imageUrl)
                 .description(description)
-                .catId(resolvedCatId)
+                .catId(null)
                 .userId(userId)
+                .color(color)
+                .feature(feature)
+                .personality(personality)
+                .confirmed(false)
                 .build();
-        return catReportRepository.save(report);
+        report = catReportRepository.save(report);
+        
+        performAsyncMatching(report.getId());
+        
+        return report;
+    }
+    
+    /**
+     * 异步执行猫咪匹配算法
+     * 基于地理位置（15km范围）+ 特征文字相似度
+     */
+    @Async
+    public void performAsyncMatching(Long reportId) {
+        try {
+            Thread.sleep(100);
+            doMatching(reportId);
+        } catch (Exception e) {
+            log.error("异步匹配失败: reportId={}", reportId, e);
+        }
+    }
+    
+    @Transactional
+    public void doMatching(Long reportId) {
+        Optional<CatReport> opt = catReportRepository.findById(reportId);
+        if (opt.isEmpty()) return;
+        
+        CatReport newReport = opt.get();
+        if (newReport.getCatId() != null) return;
+        
+        List<CatReport> nearbyReports = findNearbyReports(
+                newReport.getLat(), newReport.getLng(), MATCH_RADIUS_KM, reportId);
+        
+        if (nearbyReports.isEmpty()) {
+            createNewCatForReport(newReport);
+            return;
+        }
+        
+        CatReport bestMatch = null;
+        double bestScore = 0;
+        
+        for (CatReport existing : nearbyReports) {
+            if (existing.getCatId() == null) continue;
+            
+            double score = calculateMatchScore(newReport, existing);
+            if (score > bestScore && score >= FEATURE_MATCH_THRESHOLD) {
+                bestScore = score;
+                bestMatch = existing;
+            }
+        }
+        
+        if (bestMatch != null && bestMatch.getCatId() != null) {
+            newReport.setCatId(bestMatch.getCatId());
+            newReport.setMatchConfidence((float) bestScore);
+            newReport.setAiSuggestedCatId(bestMatch.getCatId());
+            catReportRepository.save(newReport);
+            
+            catRepository.findById(bestMatch.getCatId()).ifPresent(cat -> {
+                cat.setReportCount(cat.getReportCount() != null ? cat.getReportCount() + 1 : 1);
+                if (cat.getPrimaryImageUrl() == null && newReport.getImageUrl() != null) {
+                    cat.setPrimaryImageUrl(newReport.getImageUrl());
+                }
+                catRepository.save(cat);
+            });
+            
+            log.info("匹配成功: reportId={} -> catId={}, score={}", 
+                    reportId, bestMatch.getCatId(), bestScore);
+        } else {
+            createNewCatForReport(newReport);
+        }
+    }
+    
+    private void createNewCatForReport(CatReport report) {
+        Cat newCat = Cat.builder()
+                .color(report.getColor())
+                .feature(report.getFeature())
+                .personality(report.getPersonality())
+                .primaryImageUrl(report.getImageUrl())
+                .reportCount(1)
+                .status("active")
+                .build();
+        newCat = catRepository.save(newCat);
+        
+        report.setCatId(newCat.getId());
+        report.setConfirmed(false);
+        catReportRepository.save(report);
+        
+        log.info("创建新猫咪: reportId={} -> newCatId={}", report.getId(), newCat.getId());
+    }
+    
+    /**
+     * 查找指定范围内的上报记录
+     */
+    public List<CatReport> findNearbyReports(double lat, double lng, double radiusKm, Long excludeId) {
+        double latDelta = radiusKm / 111.0;
+        double lngDelta = radiusKm / (111.0 * Math.cos(Math.toRadians(lat)));
+        
+        double minLat = lat - latDelta;
+        double maxLat = lat + latDelta;
+        double minLng = lng - lngDelta;
+        double maxLng = lng + lngDelta;
+        
+        List<CatReport> candidates = catReportRepository.findAllByOrderByReportTimeDesc().stream()
+                .filter(r -> !r.getId().equals(excludeId))
+                .filter(r -> r.getLat() >= minLat && r.getLat() <= maxLat)
+                .filter(r -> r.getLng() >= minLng && r.getLng() <= maxLng)
+                .filter(r -> calculateDistance(lat, lng, r.getLat(), r.getLng()) <= radiusKm)
+                .collect(Collectors.toList());
+        
+        return candidates;
+    }
+    
+    /**
+     * 计算两点之间的距离（km）- Haversine 公式
+     */
+    private double calculateDistance(double lat1, double lng1, double lat2, double lng2) {
+        final double R = 6371.0;
+        double dLat = Math.toRadians(lat2 - lat1);
+        double dLng = Math.toRadians(lng2 - lng1);
+        double a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                   Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2)) *
+                   Math.sin(dLng / 2) * Math.sin(dLng / 2);
+        double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return R * c;
+    }
+    
+    /**
+     * 计算两条上报记录的匹配分数
+     * 基于颜色、特征、性格的文字相似度
+     */
+    private double calculateMatchScore(CatReport r1, CatReport r2) {
+        double colorScore = calculateTextSimilarity(r1.getColor(), r2.getColor());
+        double featureScore = calculateTextSimilarity(r1.getFeature(), r2.getFeature());
+        double personalityScore = calculateTextSimilarity(r1.getPersonality(), r2.getPersonality());
+        
+        double colorWeight = 0.5;
+        double featureWeight = 0.3;
+        double personalityWeight = 0.2;
+        
+        return colorScore * colorWeight + featureScore * featureWeight + personalityScore * personalityWeight;
+    }
+    
+    /**
+     * 计算文字相似度（基于关键词重叠）
+     */
+    private double calculateTextSimilarity(String text1, String text2) {
+        if (text1 == null || text2 == null) return 0.0;
+        if (text1.isEmpty() || text2.isEmpty()) return 0.0;
+        if (text1.equals(text2)) return 1.0;
+        
+        Set<String> keywords1 = extractKeywords(text1);
+        Set<String> keywords2 = extractKeywords(text2);
+        
+        if (keywords1.isEmpty() || keywords2.isEmpty()) return 0.0;
+        
+        Set<String> intersection = new HashSet<>(keywords1);
+        intersection.retainAll(keywords2);
+        
+        Set<String> union = new HashSet<>(keywords1);
+        union.addAll(keywords2);
+        
+        return (double) intersection.size() / union.size();
+    }
+    
+    /**
+     * 从文本中提取关键词
+     */
+    private Set<String> extractKeywords(String text) {
+        if (text == null) return Collections.emptySet();
+        return Arrays.stream(text.split("[、,，\\s]+"))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .collect(Collectors.toSet());
+    }
+    
+    // ==================== 用户异议修改 ====================
+    
+    /**
+     * 获取上报详情（含匹配信息和附近猫咪）
+     */
+    public Optional<Map<String, Object>> getReportDetail(Long reportId) {
+        return catReportRepository.findById(reportId).map(report -> {
+            Map<String, Object> result = new HashMap<>();
+            result.put("id", report.getId());
+            result.put("lat", report.getLat());
+            result.put("lng", report.getLng());
+            result.put("imageUrl", report.getImageUrl());
+            result.put("description", report.getDescription());
+            result.put("color", report.getColor());
+            result.put("feature", report.getFeature());
+            result.put("personality", report.getPersonality());
+            result.put("reportTime", report.getReportTime() != null ? report.getReportTime().toString() : "");
+            result.put("catId", report.getCatId());
+            result.put("matchConfidence", report.getMatchConfidence());
+            result.put("confirmed", report.getConfirmed() != null && report.getConfirmed());
+            
+            if (report.getCatId() != null) {
+                catRepository.findById(report.getCatId()).ifPresent(cat -> {
+                    Map<String, Object> catInfo = new HashMap<>();
+                    catInfo.put("id", cat.getId());
+                    catInfo.put("name", cat.getName());
+                    catInfo.put("color", cat.getColor());
+                    catInfo.put("primaryImageUrl", cat.getPrimaryImageUrl());
+                    catInfo.put("reportCount", cat.getReportCount());
+                    result.put("matchedCat", catInfo);
+                });
+            }
+            
+            List<Map<String, Object>> nearbyCats = getNearbyCats(report.getLat(), report.getLng(), MATCH_RADIUS_KM);
+            result.put("nearbyCats", nearbyCats);
+            
+            return result;
+        });
+    }
+    
+    /**
+     * 获取附近的猫咪列表
+     */
+    public List<Map<String, Object>> getNearbyCats(double lat, double lng, double radiusKm) {
+        List<CatReport> nearbyReports = findNearbyReports(lat, lng, radiusKm, -1L);
+        
+        Set<Long> catIds = nearbyReports.stream()
+                .map(CatReport::getCatId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        
+        return catIds.stream()
+                .map(catRepository::findById)
+                .filter(Optional::isPresent)
+                .map(Optional::get)
+                .map(cat -> {
+                    Map<String, Object> m = new HashMap<>();
+                    m.put("id", cat.getId());
+                    m.put("name", cat.getName() != null ? cat.getName() : "");
+                    m.put("color", cat.getColor() != null ? cat.getColor() : "");
+                    m.put("feature", cat.getFeature() != null ? cat.getFeature() : "");
+                    m.put("primaryImageUrl", cat.getPrimaryImageUrl() != null ? cat.getPrimaryImageUrl() : "");
+                    m.put("reportCount", cat.getReportCount() != null ? cat.getReportCount() : 0);
+                    return m;
+                })
+                .collect(Collectors.toList());
+    }
+    
+    /**
+     * 用户异议：重新分配上报的猫咪归属
+     */
+    @Transactional
+    public boolean reassignReportCat(Long reportId, Long newCatId, Boolean isNewCat, Long userId) {
+        Optional<CatReport> opt = catReportRepository.findById(reportId);
+        if (opt.isEmpty()) return false;
+        
+        CatReport report = opt.get();
+        Long oldCatId = report.getCatId();
+        
+        if (Boolean.TRUE.equals(isNewCat)) {
+            Cat newCat = Cat.builder()
+                    .color(report.getColor())
+                    .feature(report.getFeature())
+                    .personality(report.getPersonality())
+                    .primaryImageUrl(report.getImageUrl())
+                    .reportCount(1)
+                    .status("active")
+                    .build();
+            newCat = catRepository.save(newCat);
+            report.setCatId(newCat.getId());
+            log.info("用户异议：创建新猫咪 reportId={} -> newCatId={}", reportId, newCat.getId());
+        } else if (newCatId != null) {
+            Optional<Cat> newCatOpt = catRepository.findById(newCatId);
+            if (newCatOpt.isEmpty()) return false;
+            
+            report.setCatId(newCatId);
+            Cat newCat = newCatOpt.get();
+            newCat.setReportCount(newCat.getReportCount() != null ? newCat.getReportCount() + 1 : 1);
+            catRepository.save(newCat);
+            log.info("用户异议：重新分配 reportId={} -> catId={}", reportId, newCatId);
+        } else {
+            return false;
+        }
+        
+        report.setConfirmed(true);
+        catReportRepository.save(report);
+        
+        if (oldCatId != null && !oldCatId.equals(report.getCatId())) {
+            catRepository.findById(oldCatId).ifPresent(oldCat -> {
+                int count = oldCat.getReportCount() != null ? oldCat.getReportCount() - 1 : 0;
+                oldCat.setReportCount(Math.max(0, count));
+                catRepository.save(oldCat);
+            });
+        }
+        
+        return true;
     }
 
     public List<LocationDto> getLocations() {
@@ -48,13 +345,11 @@ public class CatService {
         return reports.stream().map(r -> {
             LocationDto dto = new LocationDto(r.getId(), r.getLat(), r.getLng(), r.getImageUrl(), r.getDescription(),
                     r.getReportTime() != null ? r.getReportTime().toString() : "", r.getUserId());
-            if (r.getCatId() != null) {
-                catRepository.findById(r.getCatId()).ifPresent(c -> {
-                    dto.setColor(c.getColor());
-                    dto.setFeature(c.getFeature());
-                    dto.setPersonality(c.getPersonality());
-                });
-            }
+            dto.setCatId(r.getCatId());
+            dto.setMatchConfidence(r.getMatchConfidence());
+            dto.setColor(r.getColor());
+            dto.setFeature(r.getFeature());
+            dto.setPersonality(r.getPersonality());
             return dto;
         }).collect(Collectors.toList());
     }
@@ -64,13 +359,11 @@ public class CatService {
         return reports.stream().map(r -> {
             LocationDto dto = new LocationDto(r.getId(), r.getLat(), r.getLng(), r.getImageUrl(), r.getDescription(),
                     r.getReportTime() != null ? r.getReportTime().toString() : "", r.getUserId());
-            if (r.getCatId() != null) {
-                catRepository.findById(r.getCatId()).ifPresent(c -> {
-                    dto.setColor(c.getColor());
-                    dto.setFeature(c.getFeature());
-                    dto.setPersonality(c.getPersonality());
-                });
-            }
+            dto.setCatId(r.getCatId());
+            dto.setMatchConfidence(r.getMatchConfidence());
+            dto.setColor(r.getColor());
+            dto.setFeature(r.getFeature());
+            dto.setPersonality(r.getPersonality());
             return dto;
         }).collect(Collectors.toList());
     }
@@ -171,6 +464,123 @@ public class CatService {
         }
     }
 
+    // ==================== 猫咪档案管理 ====================
+
+    public Page<Cat> listCats(int page, int size, String keyword, String status) {
+        PageRequest pageRequest = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "reportCount"));
+        if (keyword != null && !keyword.isEmpty()) {
+            return catRepository.searchByKeyword(keyword, pageRequest);
+        }
+        if (status != null && !status.isEmpty()) {
+            return catRepository.findByStatus(status, pageRequest);
+        }
+        return catRepository.findAll(pageRequest);
+    }
+
+    public Optional<Map<String, Object>> getCatDetail(Long catId) {
+        return catRepository.findById(catId).map(cat -> {
+            Map<String, Object> result = new HashMap<>();
+            result.put("id", cat.getId());
+            result.put("name", cat.getName());
+            result.put("color", cat.getColor());
+            result.put("feature", cat.getFeature());
+            result.put("personality", cat.getPersonality());
+            result.put("status", cat.getStatus());
+            result.put("primaryImageUrl", cat.getPrimaryImageUrl());
+            result.put("reportCount", cat.getReportCount());
+            result.put("hasEmbedding", cat.getAiEmbedding() != null && cat.getAiEmbedding().length > 0);
+            result.put("createdAt", cat.getCreatedAt() != null ? cat.getCreatedAt().toString() : "");
+
+            List<CatReport> reports = catReportRepository.findByCatIdOrderByReportTimeDesc(catId);
+            List<Map<String, Object>> reportHistory = reports.stream().map(r -> {
+                Map<String, Object> m = new HashMap<>();
+                m.put("id", r.getId());
+                m.put("lat", r.getLat());
+                m.put("lng", r.getLng());
+                m.put("imageUrl", r.getImageUrl());
+                m.put("description", r.getDescription());
+                m.put("reportTime", r.getReportTime() != null ? r.getReportTime().toString() : "");
+                m.put("confirmed", r.getConfirmed() != null && r.getConfirmed());
+                return m;
+            }).collect(Collectors.toList());
+            result.put("reportHistory", reportHistory);
+
+            return result;
+        });
+    }
+
+    @Transactional
+    public Optional<Cat> updateCat(Long catId, String name, String color, String feature,
+                                    String personality, String status, String primaryImageUrl) {
+        return catRepository.findById(catId).map(cat -> {
+            if (name != null) cat.setName(name);
+            if (color != null) cat.setColor(color);
+            if (feature != null) cat.setFeature(feature);
+            if (personality != null) cat.setPersonality(personality);
+            if (status != null) cat.setStatus(status);
+            if (primaryImageUrl != null) cat.setPrimaryImageUrl(primaryImageUrl);
+            return catRepository.save(cat);
+        });
+    }
+
+    @Transactional
+    public boolean confirmReportCat(Long reportId, Long catId, Float confidence, Long userId) {
+        Optional<CatReport> opt = catReportRepository.findById(reportId);
+        if (opt.isEmpty()) return false;
+
+        CatReport report = opt.get();
+        report.setConfirmed(true);
+        report.setMatchConfidence(confidence);
+
+        if (catId != null) {
+            report.setCatId(catId);
+            catRepository.findById(catId).ifPresent(cat -> {
+                cat.setReportCount(cat.getReportCount() != null ? cat.getReportCount() + 1 : 1);
+                if (cat.getPrimaryImageUrl() == null && report.getImageUrl() != null) {
+                    cat.setPrimaryImageUrl(report.getImageUrl());
+                }
+                catRepository.save(cat);
+            });
+        } else {
+            Cat newCat = Cat.builder()
+                    .primaryImageUrl(report.getImageUrl())
+                    .reportCount(1)
+                    .build();
+            newCat = catRepository.save(newCat);
+            report.setCatId(newCat.getId());
+        }
+
+        catReportRepository.save(report);
+        return true;
+    }
+
+    @Transactional
+    public boolean mergeCats(Long targetCatId, List<Long> sourceCatIds) {
+        Optional<Cat> targetOpt = catRepository.findById(targetCatId);
+        if (targetOpt.isEmpty()) return false;
+
+        Cat target = targetOpt.get();
+        int mergedCount = 0;
+
+        for (Long sourceId : sourceCatIds) {
+            if (sourceId.equals(targetCatId)) continue;
+
+            List<CatReport> reports = catReportRepository.findByCatIdOrderByReportTimeDesc(sourceId);
+            for (CatReport report : reports) {
+                report.setCatId(targetCatId);
+                catReportRepository.save(report);
+                mergedCount++;
+            }
+
+            catRepository.deleteById(sourceId);
+        }
+
+        target.setReportCount(target.getReportCount() != null ? target.getReportCount() + mergedCount : mergedCount);
+        catRepository.save(target);
+
+        return true;
+    }
+
     public static class LocationDto {
         public long id;
         public double lat;
@@ -182,6 +592,8 @@ public class CatService {
         public String color;
         public String feature;
         public String personality;
+        public Long catId;
+        public Float matchConfidence;
 
         public LocationDto(long id, double lat, double lng, String imageUrl, String description, String reportTime,
                 long userId) {
@@ -204,6 +616,14 @@ public class CatService {
 
         public void setPersonality(String personality) {
             this.personality = personality;
+        }
+        
+        public void setCatId(Long catId) {
+            this.catId = catId;
+        }
+        
+        public void setMatchConfidence(Float matchConfidence) {
+            this.matchConfidence = matchConfidence;
         }
     }
 }

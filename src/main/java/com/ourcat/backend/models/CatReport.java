@@ -44,6 +44,25 @@ public class CatReport {
     @Column(name = "user_id", nullable = false)
     private Long userId;
 
+    @Column(name = "match_confidence")
+    private Float matchConfidence;
+
+    @Column(name = "confirmed")
+    @Builder.Default
+    private Boolean confirmed = false;
+
+    @Column(name = "ai_suggested_cat_id")
+    private Long aiSuggestedCatId;
+    
+    @Column(length = 100)
+    private String color;
+    
+    @Column(length = 200)
+    private String feature;
+    
+    @Column(length = 200)
+    private String personality;
+
     @PrePersist
     public void prePersist() {
         if (reportTime == null) reportTime = Instant.now();
