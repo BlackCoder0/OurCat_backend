@@ -33,8 +33,7 @@ public class AiController {
         if (imageUrl == null || imageUrl.isEmpty()) {
             return ResponseEntity.badRequest().body(Map.of(
                     "success", false,
-                    "message", "imageUrl is required"
-            ));
+                    "message", "imageUrl is required"));
         }
 
         AiService.DetectResult result = aiService.detect(imageUrl);
@@ -57,6 +56,7 @@ public class AiController {
 
     /**
      * 单独提取特征向量（用于调试或手动处理）
+     * 失败时返回 success=false 且 message 为具体原因（如 HF 401、超时、图片下载失败）
      */
     @PostMapping("/extract-embedding")
     public ResponseEntity<Map<String, Object>> extractEmbedding(@RequestBody Map<String, Object> body) {
@@ -64,22 +64,24 @@ public class AiController {
         if (imageUrl == null || imageUrl.isEmpty()) {
             return ResponseEntity.badRequest().body(Map.of(
                     "success", false,
-                    "message", "imageUrl is required"
-            ));
+                    "message", "imageUrl is required"));
         }
 
-        float[] embedding = aiService.extractEmbedding(imageUrl);
-        if (embedding == null) {
+        AiService.ExtractEmbeddingResult result = aiService.extractEmbeddingWithDetail(imageUrl);
+        if (result.embedding != null) {
             return ResponseEntity.ok(Map.of(
-                    "success", false,
-                    "message", "Failed to extract embedding"
-            ));
+                    "success", true,
+                    "embeddingSize", result.embedding.length));
         }
-
         return ResponseEntity.ok(Map.of(
-                "success", true,
-                "embeddingSize", embedding.length
-        ));
+                "success", false,
+                "message", result.errorMessage != null ? result.errorMessage : "Failed to extract embedding"));
+    }
+
+    @GetMapping("/config-check")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Map<String, Object>> configCheck() {
+        return ResponseEntity.ok(aiService.getRuntimeConfig());
     }
 
     /**
@@ -94,37 +96,35 @@ public class AiController {
         if (imageUrl == null || imageUrl.isEmpty()) {
             return ResponseEntity.badRequest().body(Map.of(
                     "success", false,
-                    "message", "imageUrl is required"
-            ));
+                    "message", "imageUrl is required"));
         }
 
-        float[] embedding = aiService.extractEmbedding(imageUrl);
-        if (embedding == null) {
+        AiService.ExtractEmbeddingResult result = aiService.extractEmbeddingWithDetail(imageUrl);
+        if (result.embedding == null) {
             return ResponseEntity.ok(Map.of(
                     "success", false,
-                    "message", "Failed to extract embedding"
-            ));
+                    "message", result.errorMessage != null ? result.errorMessage : "Failed to extract embedding"));
         }
 
-        aiService.saveEmbedding(catId, embedding);
+        aiService.saveEmbedding(catId, result.embedding);
         return ResponseEntity.ok(Map.of(
                 "success", true,
-                "message", "Embedding saved for cat " + catId
-        ));
+                "message", "Embedding saved for cat " + catId));
     }
 
     /**
      * 批量为所有猫咪提取特征（管理员操作）
      * 注意：此操作耗时较长，会对 Hugging Face API 进行多次调用
+     * 
+     * @param limit 每次处理的猫咪数量，默认 10
      */
     @PostMapping("/batch-extract")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<Map<String, Object>> batchExtract() {
-        int count = aiService.batchExtractEmbeddings();
+    public ResponseEntity<Map<String, Object>> batchExtract(@RequestParam(defaultValue = "10") Integer limit) {
+        int count = aiService.batchExtractEmbeddings(limit);
         return ResponseEntity.ok(Map.of(
                 "success", true,
                 "message", "Batch extraction completed",
-                "processedCount", count
-        ));
+                "processedCount", count));
     }
 }

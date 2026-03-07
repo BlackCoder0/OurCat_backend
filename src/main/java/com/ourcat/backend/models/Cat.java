@@ -47,6 +47,15 @@ public class Cat {
     @Column(name = "ai_embedding")
     private byte[] aiEmbedding;
 
+    @Column(name = "ai_embedding_model", length = 100)
+    private String aiEmbeddingModel;
+
+    @Column(name = "ai_embedding_dim")
+    private Integer aiEmbeddingDim;
+
+    @Column(name = "ai_embedding_updated_at")
+    private Instant aiEmbeddingUpdatedAt;
+
     @Column(name = "created_at")
     private Instant createdAt;
 
