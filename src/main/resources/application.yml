@@ -1,0 +1,63 @@
+spring:
+  application:
+    name: ourcat-backend
+  datasource:
+    url: jdbc:mysql://${DB_HOST:localhost}:3306/ourcat?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
+    username: ${DB_USERNAME:}
+    password: ${DB_PASSWORD:}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+    open-in-view: false
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+server:
+  port: ${SERVER_PORT:8080}
+  servlet:
+    context-path: /
+
+# Placeholders - replace in production
+ourcat:
+  jwt:
+    secret: ${JWT_SECRET:change-me-in-local-profile}
+    expiration-ms: ${JWT_EXPIRATION_MS:86400000}
+  oss:
+    endpoint: ${OURCAT_OSS_ENDPOINT:}
+    bucket: ${OURCAT_OSS_BUCKET:}
+    access-key-id: ${OURCAT_OSS_ACCESS_KEY_ID:}
+    access-key-secret: ${OURCAT_OSS_ACCESS_KEY_SECRET:}
+  qweather:
+    jwt: ${OURCAT_QWEATHER_JWT:}
+  amap:
+    key: ${AMAP_KEY:}
+  ai:
+    enabled: ${AI_ENABLED:true}
+    # 方案一（服务器内存紧张时）：Replicate 云端 API，不占本机内存，按量约 $0.00022/次。注册 https://replicate.com 取 token 后设 AI_REPLICATE_ENABLED=true 与 AI_REPLICATE_API_TOKEN
+    replicate-enabled: ${AI_REPLICATE_ENABLED:false}
+    replicate-api-token: ${AI_REPLICATE_API_TOKEN:}
+    replicate-model-name: ${AI_REPLICATE_MODEL_NAME:replicate/krthr-clip-embeddings}
+    # 方案二：自托管 embedding 服务。本地运行 python embedding_server.py 后设 AI_EMBEDDING_API_URL
+    embedding-api-url: ${AI_EMBEDDING_API_URL:}
+    hf-token: ${AI_HF_TOKEN:}
+    model-url: ${AI_MODEL_URL:https://router.huggingface.co/hf-inference/models/facebook/dinov2-base}
+    model-name: ${AI_MODEL_NAME:facebook/dinov2-base}
+    embedding-dim: ${AI_EMBEDDING_DIM:768}
+    match-threshold: ${AI_MATCH_THRESHOLD:0.7}
+    top-k: ${AI_TOP_K:5}
+  # 上报匹配阈值（提高可减少“一只猫下出现多只不同猫”的误并）
+  match:
+    combined-threshold: ${MATCH_COMBINED_THRESHOLD:0.68}
+    text-only-threshold: ${MATCH_TEXT_ONLY_THRESHOLD:0.68}
+    min-image-score-when-both: ${MATCH_MIN_IMAGE_SCORE:0.62}
+
+logging:
+  level:
+    root: INFO
+    com.ourcat: DEBUG
