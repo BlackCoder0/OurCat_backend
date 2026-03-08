@@ -50,6 +50,10 @@ public class Post {
     @Column(name = "created_at")
     private Instant createdAt;
 
+    /** 引用的猫咪档案 ID（可选，用于论坛帖关联猫咪） */
+    @Column(name = "referenced_cat_id")
+    private Long referencedCatId;
+
     @PrePersist
     public void prePersist() {
         if (createdAt == null) createdAt = Instant.now();

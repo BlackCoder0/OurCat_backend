@@ -34,7 +34,7 @@ public class Cat {
 
     @Column(length = 20)
     @Builder.Default
-    private String status = "active";
+    private String status = "活跃";
 
     @Column(name = "primary_image_url", length = 500)
     private String primaryImageUrl;

@@ -1,9 +1,11 @@
 package com.ourcat.backend.controllers;
 
 import com.ourcat.backend.config.UserPrincipal;
+import com.ourcat.backend.models.Cat;
 import com.ourcat.backend.models.Comment;
 import com.ourcat.backend.models.Post;
 import com.ourcat.backend.models.User;
+import com.ourcat.backend.repositories.CatRepository;
 import com.ourcat.backend.repositories.UserRepository;
 import com.ourcat.backend.services.ForumService;
 import lombok.Data;
@@ -31,6 +33,7 @@ public class ForumController {
 
     private final ForumService forumService;
     private final UserRepository userRepository;
+    private final CatRepository catRepository;
 
     @GetMapping("/posts")
     public ResponseEntity<Map<String, Object>> listPosts(
@@ -42,6 +45,9 @@ public class ForumController {
             Map<String, Object> m = new HashMap<>(postToMap(post));
             forumService.getPostAuthor(post.getUserId())
                     .ifPresent(u -> m.put("authorName", u.getNickname() != null ? u.getNickname() : u.getUsername()));
+            if (post.getReferencedCatId() != null) {
+                catRepository.findById(post.getReferencedCatId()).ifPresent(cat -> m.put("referencedCat", catToRefMap(cat)));
+            }
             return m;
         }).collect(Collectors.toList());
         return ResponseEntity.ok(Map.of(
@@ -61,6 +67,9 @@ public class ForumController {
             map.put("authorName", u.getNickname() != null ? u.getNickname() : u.getUsername());
             map.put("authorAvatar", u.getAvatarUrl());
         });
+        if (post.getReferencedCatId() != null) {
+            catRepository.findById(post.getReferencedCatId()).ifPresent(cat -> map.put("referencedCat", catToRefMap(cat)));
+        }
         if (principal != null && principal.getUser() != null) {
             map.put("userVote", forumService.getCurrentUserVote(principal.getUser().getId(), id));
         }
@@ -73,7 +82,8 @@ public class ForumController {
         if (principal == null || principal.getUser() == null)
             return ResponseEntity.status(401).build();
         List<String> images = req.getImages() != null ? req.getImages() : new ArrayList<>();
-        Post post = forumService.createPost(principal.getUser().getId(), req.getTitle(), req.getContent(), images);
+        Long refCatId = req.getReferencedCatId() != null && req.getReferencedCatId() > 0 ? req.getReferencedCatId() : null;
+        Post post = forumService.createPost(principal.getUser().getId(), req.getTitle(), req.getContent(), images, refCatId);
         return ResponseEntity.ok(postToMap(post));
     }
 
@@ -84,7 +94,8 @@ public class ForumController {
         if (principal == null)
             return ResponseEntity.status(401).build();
         Long userId = principal.getUser().getId();
-        Optional<Post> updated = forumService.updatePost(id, userId, req.getTitle(), req.getContent(), req.getImages());
+        Long refCatId = req.getReferencedCatId() != null && req.getReferencedCatId() > 0 ? req.getReferencedCatId() : null;
+        Optional<Post> updated = forumService.updatePost(id, userId, req.getTitle(), req.getContent(), req.getImages(), refCatId);
         if (updated.isEmpty())
             return ResponseEntity.status(403).body(Map.of("message", "无权限或帖子不存在"));
         return ResponseEntity.ok(postToMap(updated.get()));
@@ -266,16 +277,28 @@ public class ForumController {
     }
 
     private Map<String, Object> postToMap(Post post) {
-        return Map.of(
-                "id", post.getId(),
-                "title", post.getTitle(),
-                "content", post.getContent() != null ? post.getContent() : "",
-                "images", post.getImages() != null ? post.getImages() : "[]",
-                "likes", post.getLikes(),
-                "dislikes", post.getDislikes(),
-                "userId", post.getUserId(),
-                "pinned", post.getPinned(),
-                "createdAt", post.getCreatedAt() != null ? post.getCreatedAt().toString() : "");
+        Map<String, Object> m = new HashMap<>();
+        m.put("id", post.getId());
+        m.put("title", post.getTitle());
+        m.put("content", post.getContent() != null ? post.getContent() : "");
+        m.put("images", post.getImages() != null ? post.getImages() : "[]");
+        m.put("likes", post.getLikes());
+        m.put("dislikes", post.getDislikes());
+        m.put("userId", post.getUserId());
+        m.put("pinned", post.getPinned());
+        m.put("createdAt", post.getCreatedAt() != null ? post.getCreatedAt().toString() : "");
+        m.put("referencedCatId", post.getReferencedCatId());
+        return m;
+    }
+
+    private Map<String, Object> catToRefMap(Cat cat) {
+        Map<String, Object> m = new HashMap<>();
+        m.put("id", cat.getId());
+        m.put("name", cat.getName() != null ? cat.getName() : "");
+        m.put("primaryImageUrl", cat.getPrimaryImageUrl() != null ? cat.getPrimaryImageUrl() : "");
+        m.put("color", cat.getColor() != null ? cat.getColor() : "");
+        m.put("status", cat.getStatus() != null ? cat.getStatus() : "active");
+        return m;
     }
 
     @Data
@@ -285,6 +308,7 @@ public class ForumController {
         private String title;
         private String content;
         private List<String> images;
+        private Long referencedCatId;
     }
 
     @Data

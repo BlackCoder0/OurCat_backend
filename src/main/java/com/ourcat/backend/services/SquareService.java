@@ -38,7 +38,7 @@ public class SquareService {
     }
 
     @Transactional
-    public SquarePost createPost(Long userId, String text, List<String> images, String location, String type) {
+    public SquarePost createPost(Long userId, String text, List<String> images, String location, String type, Long referencedCatId) {
         String imagesJson = images == null || images.isEmpty() ? null
                 : images.stream().collect(Collectors.joining("\",\"", "[\"", "\"]"));
         SquarePost post = SquarePost.builder()
@@ -49,6 +49,7 @@ public class SquareService {
                 .status("open")
                 .likes(0) // Explicitly set default value to avoid null
                 .userId(userId)
+                .referencedCatId(referencedCatId)
                 .build();
         return squarePostRepository.save(post);
     }

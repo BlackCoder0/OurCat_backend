@@ -42,7 +42,7 @@ public class ForumService {
     }
 
     @Transactional
-    public Post createPost(Long userId, String title, String content, List<String> imageUrls) {
+    public Post createPost(Long userId, String title, String content, List<String> imageUrls, Long referencedCatId) {
         String imagesJson = imageUrls == null || imageUrls.isEmpty() ? null :
                 imageUrls.stream().collect(Collectors.joining("\",\"", "[\"", "\"]"));
         Post post = Post.builder()
@@ -53,12 +53,13 @@ public class ForumService {
                 .likes(0)
                 .dislikes(0)
                 .pinned(false)
+                .referencedCatId(referencedCatId)
                 .build();
         return postRepository.save(post);
     }
 
     @Transactional
-    public Optional<Post> updatePost(Long postId, Long userId, String title, String content, List<String> imageUrls) {
+    public Optional<Post> updatePost(Long postId, Long userId, String title, String content, List<String> imageUrls, Long referencedCatId) {
         Optional<Post> opt = postRepository.findById(postId);
         if (opt.isEmpty()) return Optional.empty();
         Post post = opt.get();
@@ -69,6 +70,7 @@ public class ForumService {
             post.setImages(imageUrls.isEmpty() ? null :
                     imageUrls.stream().collect(Collectors.joining("\",\"", "[\"", "\"]")));
         }
+        post.setReferencedCatId(referencedCatId);
         return Optional.of(postRepository.save(post));
     }
 

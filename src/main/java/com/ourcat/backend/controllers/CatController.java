@@ -106,24 +106,19 @@ public class CatController {
     // ==================== 猫咪档案管理 API ====================
 
     /**
-     * 获取猫咪档案列表（分页）
+     * 获取猫咪档案列表（分页）。支持 keyword、status 筛选；支持 sortBy=nearby 且传入 lat、lng 时按距离就近排序。
      */
     @GetMapping("/list")
     public ResponseEntity<Map<String, Object>> listCats(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(required = false) String keyword,
-            @RequestParam(required = false) String status) {
-        Page<Cat> cats = catService.listCats(page, size, keyword, status);
-        List<Map<String, Object>> content = cats.getContent().stream()
-                .map(this::catToMap)
-                .collect(Collectors.toList());
-        return ResponseEntity.ok(Map.of(
-                "content", content,
-                "totalPages", cats.getTotalPages(),
-                "totalElements", cats.getTotalElements(),
-                "page", page
-        ));
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) Double lat,
+            @RequestParam(required = false) Double lng,
+            @RequestParam(required = false) String sortBy) {
+        Map<String, Object> result = catService.listCatsWithSort(page, size, keyword, status, lat, lng, sortBy);
+        return ResponseEntity.ok(result);
     }
 
     /**

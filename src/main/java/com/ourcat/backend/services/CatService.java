@@ -216,7 +216,7 @@ public class CatService {
                 .personality(report.getPersonality())
                 .primaryImageUrl(report.getImageUrl())
                 .reportCount(1)
-                .status("active")
+                .status("活跃")
                 .build();
         newCat = catRepository.save(newCat);
 
@@ -405,7 +405,7 @@ public class CatService {
                     .personality(report.getPersonality())
                     .primaryImageUrl(report.getImageUrl())
                     .reportCount(1)
-                    .status("active")
+                    .status("活跃")
                     .build();
             newCat = catRepository.save(newCat);
             report.setCatId(newCat.getId());
@@ -573,6 +573,73 @@ public class CatService {
             return catRepository.findByStatus(status, pageRequest);
         }
         return catRepository.findAll(pageRequest);
+    }
+
+    private static final double NEARBY_LIST_RADIUS_KM = 100.0;
+
+    /**
+     * 分页列表，支持按距离排序（需传入 lat, lng 且 sortBy=nearby）。
+     * 返回的 Map 中每项包含 cat 字段及可选的 distanceKm。
+     */
+    public Map<String, Object> listCatsWithSort(int page, int size, String keyword, String status,
+            Double lat, Double lng, String sortBy) {
+        if (lat != null && lng != null && "nearby".equalsIgnoreCase(sortBy != null ? sortBy.trim() : "")) {
+            List<CatReport> reports = findNearbyReports(lat, lng, NEARBY_LIST_RADIUS_KM, -1L);
+            Map<Long, Double> catIdToMinDist = new LinkedHashMap<>();
+            for (CatReport r : reports) {
+                if (r.getCatId() == null) continue;
+                double d = calculateDistance(lat, lng, r.getLat(), r.getLng());
+                catIdToMinDist.merge(r.getCatId(), d, Math::min);
+            }
+            List<Long> sortedIds = catIdToMinDist.entrySet().stream()
+                    .sorted(Map.Entry.comparingByValue())
+                    .map(Map.Entry::getKey)
+                    .collect(Collectors.toList());
+            int total = sortedIds.size();
+            int from = Math.min(page * size, total);
+            int to = Math.min(from + size, total);
+            List<Map<String, Object>> content = new ArrayList<>();
+            for (int i = from; i < to; i++) {
+                Long catId = sortedIds.get(i);
+                catRepository.findById(catId).ifPresent(cat -> {
+                    Map<String, Object> m = new HashMap<>();
+                    m.put("id", cat.getId());
+                    m.put("name", cat.getName() != null ? cat.getName() : "");
+                    m.put("color", cat.getColor() != null ? cat.getColor() : "");
+                    m.put("feature", cat.getFeature() != null ? cat.getFeature() : "");
+                    m.put("primaryImageUrl", cat.getPrimaryImageUrl() != null ? cat.getPrimaryImageUrl() : "");
+                    m.put("status", cat.getStatus() != null ? cat.getStatus() : "活跃");
+                    m.put("reportCount", cat.getReportCount() != null ? cat.getReportCount() : 0);
+                    m.put("distanceKm", catIdToMinDist.get(catId));
+                    content.add(m);
+                });
+            }
+            int totalPages = size > 0 ? (int) Math.ceil((double) total / size) : 0;
+            return Map.of(
+                    "content", content,
+                    "totalElements", (long) total,
+                    "totalPages", totalPages,
+                    "page", page
+            );
+        }
+        Page<Cat> p = listCats(page, size, keyword, status);
+        List<Map<String, Object>> content = p.getContent().stream().map(cat -> {
+            Map<String, Object> m = new HashMap<>();
+            m.put("id", cat.getId());
+            m.put("name", cat.getName() != null ? cat.getName() : "");
+            m.put("color", cat.getColor() != null ? cat.getColor() : "");
+            m.put("feature", cat.getFeature() != null ? cat.getFeature() : "");
+            m.put("primaryImageUrl", cat.getPrimaryImageUrl() != null ? cat.getPrimaryImageUrl() : "");
+            m.put("status", cat.getStatus() != null ? cat.getStatus() : "活跃");
+            m.put("reportCount", cat.getReportCount() != null ? cat.getReportCount() : 0);
+            return m;
+        }).collect(Collectors.toList());
+        return Map.of(
+                "content", content,
+                "totalElements", p.getTotalElements(),
+                "totalPages", p.getTotalPages(),
+                "page", page
+        );
     }
 
     public Optional<Map<String, Object>> getCatDetail(Long catId) {
