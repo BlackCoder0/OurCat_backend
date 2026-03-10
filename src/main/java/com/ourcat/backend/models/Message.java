@@ -9,8 +9,8 @@ import java.time.Instant;
 
 @Entity
 @Table(name = "messages", indexes = {
-    @Index(columnList = "user_id"),
-    @Index(columnList = "created_at")
+        @Index(columnList = "user_id"),
+        @Index(columnList = "created_at")
 })
 @Data
 @NoArgsConstructor
@@ -44,6 +44,7 @@ public class Message {
 
     @PrePersist
     public void prePersist() {
-        if (createdAt == null) createdAt = Instant.now();
+        if (createdAt == null)
+            createdAt = Instant.now();
     }
 }

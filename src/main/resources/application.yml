@@ -34,7 +34,19 @@ ourcat:
     access-key-id: ${OURCAT_OSS_ACCESS_KEY_ID:}
     access-key-secret: ${OURCAT_OSS_ACCESS_KEY_SECRET:}
   qweather:
+    # 和风要求使用个人 API Host，否则 403 Invalid Host。在 https://console.qweather.com/setting 查看
+    api-host: ${OURCAT_QWEATHER_API_HOST:https://api.qweather.com}
+    # JWT：二选一。① 直接写 token（如环境变量 OURCAT_QWEATHER_JWT）。② 填 jwt-file 路径，由 cron 运行 backend/token运维.py 写入该文件
     jwt: ${OURCAT_QWEATHER_JWT:}
+    jwt-file: ${OURCAT_QWEATHER_JWT_FILE:}
+  open-meteo:
+    # 实时天气与天气预报使用 Open-Meteo + 中国气象局 CMA GRAPES 模型（按用户位置 latitude,longitude 查询，无需 key）
+    base-url: ${OURCAT_OPEN_METEO_BASE_URL:https://api.open-meteo.com}
+    model: ${OURCAT_OPEN_METEO_MODEL:cma_grapes_global}
+    timezone: ${OURCAT_OPEN_METEO_TIMEZONE:Asia/Shanghai}
+    # 基于 CMA GRAPES 日预报的补充预警：日际温差≥此值（℃）追加急剧升温/降温；当日降水≥此值（mm）追加强降水
+    temp-change-threshold: ${OURCAT_OPEN_METEO_TEMP_CHANGE_THRESHOLD:8}
+    heavy-precip-threshold: ${OURCAT_OPEN_METEO_HEAVY_PRECIP_THRESHOLD:30}
   amap:
     key: ${AMAP_KEY:}
   ai:

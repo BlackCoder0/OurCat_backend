@@ -63,3 +63,8 @@ spring-boot-devtools.properties
 # 杂项临时文件
 *.swp
 *~
+
+#运维
+token运维.py
+data/
+scripts/
