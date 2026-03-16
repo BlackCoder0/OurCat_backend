@@ -3,6 +3,7 @@ package com.ourcat.backend.controllers;
 import com.ourcat.backend.config.UserPrincipal;
 import com.ourcat.backend.models.User;
 import com.ourcat.backend.repositories.UserRepository;
+import com.ourcat.backend.services.OrganizationService;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -31,6 +32,7 @@ public class UserController {
     private final com.ourcat.backend.repositories.CatReportRepository catReportRepository;
     private final com.ourcat.backend.repositories.SquarePostRepository squarePostRepository;
     private final com.ourcat.backend.repositories.SquareCommentRepository squareCommentRepository;
+    private final OrganizationService organizationService;
 
     @GetMapping("/profile")
     public ResponseEntity<?> getProfile(@AuthenticationPrincipal UserPrincipal principal) {
@@ -131,6 +133,7 @@ public class UserController {
         }
         target.setRole(req.getRole());
         userRepository.save(target);
+        organizationService.syncVolunteerOrgMembership(target.getId(), req.getRole());
         return ResponseEntity.ok(toResponse(target));
     }
 

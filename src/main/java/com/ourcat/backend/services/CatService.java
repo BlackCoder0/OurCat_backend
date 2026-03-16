@@ -701,6 +701,20 @@ public class CatService {
             }).collect(Collectors.toList());
             result.put("reportHistory", reportHistory);
 
+            List<RescueActivity> rescues = rescueActivityRepository.findByCatIdOrderByCreatedAtDesc(catId);
+            List<Map<String, Object>> rescueHistory = rescues.stream().map(activity -> {
+                Map<String, Object> m = new HashMap<>();
+                m.put("activityId", activity.getId());
+                m.put("title", activity.getTitle());
+                m.put("status", activity.getStatus());
+                m.put("urgency", activity.getUrgency());
+                m.put("squarePostId", activity.getSquarePostId());
+                m.put("createdAt", activity.getCreatedAt() != null ? activity.getCreatedAt().toString() : "");
+                m.put("completedAt", activity.getCompletedAt() != null ? activity.getCompletedAt().toString() : "");
+                return m;
+            }).collect(Collectors.toList());
+            result.put("rescueHistory", rescueHistory);
+
             return result;
         });
     }

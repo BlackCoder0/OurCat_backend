@@ -48,7 +48,8 @@ public class SquareService {
     }
 
     @Transactional
-    public SquarePost createPost(Long userId, String text, List<String> images, String location, String type, Long referencedCatId) {
+    public SquarePost createPost(Long userId, String text, List<String> images, String location, String type,
+            Long referencedCatId) {
         // 校验救助类型广播
         if ("rescue".equalsIgnoreCase(type)) {
             boolean hasCat = referencedCatId != null && referencedCatId > 0;
@@ -76,7 +77,8 @@ public class SquareService {
         // 救助类型广播自动创建救助活动
         if ("rescue".equalsIgnoreCase(type)) {
             try {
-                RescueActivity activity = rescueService.create(userId, "救助广播-" + (text != null && text.length() > 20 ? text.substring(0, 20) + "..." : text),
+                RescueActivity activity = rescueService.create(userId,
+                        "救助广播-" + (text != null && text.length() > 20 ? text.substring(0, 20) + "..." : text),
                         text, referencedCatId, post.getId(), null);
                 // 关联救助活动ID到广播
                 post.setRescueActivityId(activity.getId());
@@ -93,7 +95,8 @@ public class SquareService {
      * 从救助活动同步创建广场广播（地图发起救助时调用）
      */
     @Transactional
-    public SquarePost createPostFromRescue(Long userId, String text, Long rescueActivityId, Long catId, String location) {
+    public SquarePost createPostFromRescue(Long userId, String text, Long rescueActivityId, Long catId,
+            String location) {
         SquarePost post = SquarePost.builder()
                 .text(text)
                 .images(null)
@@ -124,7 +127,8 @@ public class SquareService {
      * 获取猫咪档案的位置信息用于广播定位
      */
     public String getCatLocationForPost(Long catId) {
-        if (catId == null || catId <= 0) return null;
+        if (catId == null || catId <= 0)
+            return null;
         // 通过 CatReport 获取最新的位置信息
         return catReportRepository.findFirstByCatIdOrderByReportTimeDesc(catId)
                 .filter(report -> report.getLat() != null && report.getLng() != null)
@@ -138,9 +142,15 @@ public class SquareService {
         if (opt.isEmpty())
             return false;
         SquarePost post = opt.get();
-        // Only author can mark solved
-        if (!post.getUserId().equals(userId))
-            return false;
+        if ("rescue".equals(post.getType())) {
+            if (!canMarkSolvedRescue(post, userId)) {
+                return false;
+            }
+        } else {
+            if (!post.getUserId().equals(userId) && userRole < 2) {
+                return false;
+            }
+        }
         post.setStatus("resolved");
         squarePostRepository.save(post);
         if (post.getRescueActivityId() != null) {
@@ -156,6 +166,30 @@ public class SquareService {
             }
         }
         return true;
+    }
+
+    private boolean canMarkSolvedRescue(SquarePost post, Long userId) {
+        if (post.getUserId() != null && post.getUserId().equals(userId)) {
+            return true;
+        }
+        if (post.getRescueActivityId() == null) {
+            return false;
+        }
+        RescueActivity activity = rescueActivityRepository.findById(post.getRescueActivityId()).orElse(null);
+        if (activity != null && activity.getCreatedBy() != null && activity.getCreatedBy().equals(userId)) {
+            return true;
+        }
+        List<com.ourcat.backend.models.RescueTask> tasks = rescueService
+                .getTasksByActivityId(post.getRescueActivityId());
+        for (com.ourcat.backend.models.RescueTask task : tasks) {
+            if (task.getAssigneeUserId() != null && task.getAssigneeUserId().equals(userId)) {
+                return true;
+            }
+            if (task.getAssignerUserId() != null && task.getAssignerUserId().equals(userId)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @Transactional

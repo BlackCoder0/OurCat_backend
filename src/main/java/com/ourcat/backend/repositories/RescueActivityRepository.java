@@ -23,4 +23,10 @@ public interface RescueActivityRepository extends JpaRepository<RescueActivity, 
     List<RescueActivity> findByStatusInOrderByCreatedAtDesc(List<String> statuses);
 
     List<RescueActivity> findBySquarePostIdNotNullAndStatusInOrderByCreatedAtDesc(List<String> statuses);
+
+    List<RescueActivity> findByOrganizationIdOrderByCreatedAtDesc(Long organizationId);
+
+    List<RescueActivity> findByOrganizationIdAndStatusInOrderByCreatedAtDesc(Long organizationId, List<String> statuses);
+
+    List<RescueActivity> findByCatIdOrderByCreatedAtDesc(Long catId);
 }

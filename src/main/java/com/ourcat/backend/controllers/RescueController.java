@@ -39,8 +39,9 @@ public class RescueController {
 
     @PostMapping("/activities")
     public ResponseEntity<?> createActivity(@AuthenticationPrincipal UserPrincipal principal,
-                                            @Valid @RequestBody CreateRescueActivityRequest req) {
-        if (principal == null) return ResponseEntity.status(401).body(Map.of("message", "未登录"));
+            @Valid @RequestBody CreateRescueActivityRequest req) {
+        if (principal == null)
+            return ResponseEntity.status(401).body(Map.of("message", "未登录"));
         try {
             RescueActivity activity = rescueService.create(
                     principal.getUser().getId(),
@@ -106,9 +107,10 @@ public class RescueController {
 
     @PatchMapping("/activities/{id}")
     public ResponseEntity<?> updateActivityStatus(@AuthenticationPrincipal UserPrincipal principal,
-                                                  @PathVariable Long id,
-                                                  @RequestBody Map<String, String> body) {
-        if (principal == null) return ResponseEntity.status(401).body(Map.of("message", "未登录"));
+            @PathVariable Long id,
+            @RequestBody Map<String, String> body) {
+        if (principal == null)
+            return ResponseEntity.status(401).body(Map.of("message", "未登录"));
         String status = body != null ? body.get("status") : null;
         if (status == null || !List.of("created", "in_progress", "completed").contains(status)) {
             return ResponseEntity.badRequest().body(Map.of("message", "status 须为 created / in_progress / completed"));
@@ -121,29 +123,21 @@ public class RescueController {
     @GetMapping("/activities/{activityId}/tasks")
     public ResponseEntity<?> listActivityTasks(@PathVariable Long activityId) {
         List<RescueTask> tasks = rescueService.getTasksByActivityId(activityId);
-        List<Map<String, Object>> list = tasks.stream().map(t -> {
-            Map<String, Object> m = new HashMap<>();
-            m.put("id", t.getId());
-            m.put("rescueActivityId", t.getRescueActivityId());
-            m.put("assigneeUserId", t.getAssigneeUserId());
-            m.put("assignerUserId", t.getAssignerUserId());
-            m.put("status", t.getStatus());
-            m.put("assignedAt", t.getAssignedAt());
-            m.put("completedAt", t.getCompletedAt());
-            m.put("completionNote", t.getCompletionNote());
-            m.put("completionImages", t.getCompletionImages());
-            return m;
-        }).collect(Collectors.toList());
+        List<Map<String, Object>> list = tasks.stream()
+                .map(rescueService::taskToMap)
+                .collect(Collectors.toList());
         return ResponseEntity.ok(list);
     }
 
     @PostMapping("/activities/{activityId}/tasks")
     public ResponseEntity<?> assignTask(@AuthenticationPrincipal UserPrincipal principal,
-                                        @PathVariable Long activityId,
-                                        @RequestBody Map<String, Long> body) {
-        if (principal == null) return ResponseEntity.status(401).body(Map.of("message", "未登录"));
+            @PathVariable Long activityId,
+            @RequestBody Map<String, Long> body) {
+        if (principal == null)
+            return ResponseEntity.status(401).body(Map.of("message", "未登录"));
         Long assigneeUserId = body != null ? body.get("assigneeUserId") : null;
-        if (assigneeUserId == null) return ResponseEntity.badRequest().body(Map.of("message", "请提供 assigneeUserId"));
+        if (assigneeUserId == null)
+            return ResponseEntity.badRequest().body(Map.of("message", "请提供 assigneeUserId"));
         try {
             RescueTask task = rescueService.assignTask(activityId, assigneeUserId, principal.getUser().getId());
             return ResponseEntity.ok(rescueService.taskToMap(task));
@@ -154,8 +148,9 @@ public class RescueController {
 
     @PostMapping("/activities/{activityId}/tasks/claim")
     public ResponseEntity<?> claimTask(@AuthenticationPrincipal UserPrincipal principal,
-                                       @PathVariable Long activityId) {
-        if (principal == null) return ResponseEntity.status(401).body(Map.of("message", "未登录"));
+            @PathVariable Long activityId) {
+        if (principal == null)
+            return ResponseEntity.status(401).body(Map.of("message", "未登录"));
         try {
             RescueTask task = rescueService.claimTask(activityId, principal.getUser().getId());
             return ResponseEntity.ok(rescueService.taskToMap(task));
@@ -166,7 +161,8 @@ public class RescueController {
 
     @GetMapping("/my-tasks")
     public ResponseEntity<?> myTasks(@AuthenticationPrincipal UserPrincipal principal) {
-        if (principal == null) return ResponseEntity.status(401).body(Map.of("message", "未登录"));
+        if (principal == null)
+            return ResponseEntity.status(401).body(Map.of("message", "未登录"));
         List<RescueTask> tasks = rescueService.getMyTasks(principal.getUser().getId());
         List<Map<String, Object>> list = tasks.stream().map(rescueService::taskToMap).collect(Collectors.toList());
         return ResponseEntity.ok(list);
@@ -174,15 +170,42 @@ public class RescueController {
 
     @PatchMapping("/tasks/{taskId}")
     public ResponseEntity<?> updateTask(@AuthenticationPrincipal UserPrincipal principal,
-                                        @PathVariable Long taskId,
-                                        @RequestBody Map<String, String> body) {
-        if (principal == null) return ResponseEntity.status(401).body(Map.of("message", "未登录"));
+            @PathVariable Long taskId,
+            @RequestBody Map<String, String> body) {
+        if (principal == null)
+            return ResponseEntity.status(401).body(Map.of("message", "未登录"));
         String status = body != null ? body.get("status") : null;
         String completionNote = body != null ? body.get("completionNote") : null;
         String completionImages = body != null ? body.get("completionImages") : null;
         return rescueService.updateTask(taskId, principal.getUser().getId(), status, completionNote, completionImages)
                 .map(t -> ResponseEntity.ok(rescueService.taskToMap(t)))
                 .orElse(ResponseEntity.notFound().build());
+    }
+
+    @GetMapping("/tasks/{taskId}/logs")
+    public ResponseEntity<?> listTaskLogs(@AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable Long taskId) {
+        if (principal == null)
+            return ResponseEntity.status(401).body(Map.of("message", "未登录"));
+        return ResponseEntity.ok(rescueService.getTaskLogs(taskId, principal.getUser().getId()));
+    }
+
+    @PostMapping("/tasks/{taskId}/logs")
+    public ResponseEntity<?> addTaskLog(@AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable Long taskId,
+            @RequestBody Map<String, String> body) {
+        if (principal == null)
+            return ResponseEntity.status(401).body(Map.of("message", "未登录"));
+        String content = body != null ? body.get("content") : null;
+        String images = body != null ? body.get("images") : null;
+        String logType = body != null ? body.get("logType") : null;
+        try {
+            return rescueService.addTaskLog(taskId, principal.getUser().getId(), content, images, logType)
+                    .<ResponseEntity<?>>map(ResponseEntity::ok)
+                    .orElse(ResponseEntity.status(403).body(Map.of("message", "仅任务执行人可记录日志")));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
     }
 
     @GetMapping("/cats-need-rescue")
@@ -196,8 +219,7 @@ public class RescueController {
                 "lat", d.getLat(),
                 "lng", d.getLng(),
                 "catName", d.getCatName() != null ? d.getCatName() : "",
-                "imageUrl", d.getImageUrl() != null ? d.getImageUrl() : ""
-        )).collect(Collectors.toList());
+                "imageUrl", d.getImageUrl() != null ? d.getImageUrl() : "")).collect(Collectors.toList());
         return ResponseEntity.ok(result);
     }
 
@@ -212,8 +234,7 @@ public class RescueController {
                 "lat", d.getLat(),
                 "lng", d.getLng(),
                 "catId", d.getCatId() != null ? d.getCatId() : 0,
-                "squarePostId", d.getSquarePostId() != null ? d.getSquarePostId() : 0
-        )).collect(Collectors.toList());
+                "squarePostId", d.getSquarePostId() != null ? d.getSquarePostId() : 0)).collect(Collectors.toList());
         return ResponseEntity.ok(result);
     }
 

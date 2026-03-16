@@ -10,4 +10,8 @@ public interface RescueTaskRepository extends JpaRepository<RescueTask, Long> {
     List<RescueTask> findByRescueActivityIdOrderByAssignedAtAsc(Long rescueActivityId);
 
     List<RescueTask> findByAssigneeUserIdOrderByAssignedAtDesc(Long assigneeUserId);
+
+    List<RescueTask> findByRescueActivityIdIn(List<Long> rescueActivityIds);
+
+    boolean existsByRescueActivityIdAndAssigneeUserId(Long rescueActivityId, Long assigneeUserId);
 }

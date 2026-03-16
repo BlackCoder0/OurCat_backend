@@ -36,6 +36,17 @@ public class OrganizationController {
         return ResponseEntity.ok(members);
     }
 
+    @GetMapping("/{id}/home")
+    public ResponseEntity<?> getOrgHome(@AuthenticationPrincipal UserPrincipal principal, @PathVariable Long id) {
+        if (principal == null) return ResponseEntity.status(401).body(Map.of("message", "未登录"));
+        Map<String, Object> result = organizationService.getOrgHome(
+                id, principal.getUser().getId(), principal.getUser().getRole());
+        if (result.isEmpty()) {
+            return ResponseEntity.status(403).body(Map.of("message", "无权限查看组织主页"));
+        }
+        return ResponseEntity.ok(result);
+    }
+
     @PostMapping("/join")
     public ResponseEntity<?> join(@AuthenticationPrincipal UserPrincipal principal) {
         if (principal == null) return ResponseEntity.status(401).body(Map.of("message", "未登录"));

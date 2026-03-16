@@ -13,4 +13,6 @@ public interface OrganizationJoinRequestRepository extends JpaRepository<Organiz
     Optional<OrganizationJoinRequest> findByOrganizationIdAndUserIdAndStatus(Long organizationId, Long userId, String status);
 
     boolean existsByOrganizationIdAndUserIdAndStatus(Long organizationId, Long userId, String status);
+
+    void deleteByOrganizationIdAndUserIdAndStatus(Long organizationId, Long userId, String status);
 }

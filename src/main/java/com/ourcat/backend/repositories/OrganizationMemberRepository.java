@@ -14,5 +14,7 @@ public interface OrganizationMemberRepository extends JpaRepository<Organization
 
     boolean existsByOrganizationIdAndUserId(Long organizationId, Long userId);
 
+    long countByOrganizationId(Long organizationId);
+
     void deleteByOrganizationIdAndUserId(Long organizationId, Long userId);
 }
