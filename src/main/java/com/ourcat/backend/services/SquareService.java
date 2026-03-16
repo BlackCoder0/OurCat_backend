@@ -2,6 +2,12 @@ package com.ourcat.backend.services;
 
 import com.ourcat.backend.models.SquareComment;
 import com.ourcat.backend.models.SquarePost;
+import com.ourcat.backend.models.RescueActivity;
+import com.ourcat.backend.models.Cat;
+import com.ourcat.backend.models.CatReport;
+import com.ourcat.backend.repositories.CatRepository;
+import com.ourcat.backend.repositories.CatReportRepository;
+import com.ourcat.backend.repositories.RescueActivityRepository;
 import com.ourcat.backend.repositories.SquareCommentRepository;
 import com.ourcat.backend.repositories.SquarePostRepository;
 import com.ourcat.backend.repositories.UserRepository;
@@ -24,6 +30,10 @@ public class SquareService {
     private final SquareCommentRepository squareCommentRepository;
     private final UserRepository userRepository;
     private final MessageService messageService;
+    private final RescueService rescueService;
+    private final CatRepository catRepository;
+    private final CatReportRepository catReportRepository;
+    private final RescueActivityRepository rescueActivityRepository;
 
     public Page<SquarePost> listPosts(int page, int size, String sort) {
         Pageable pageable = PageRequest.of(page, size);
@@ -39,6 +49,16 @@ public class SquareService {
 
     @Transactional
     public SquarePost createPost(Long userId, String text, List<String> images, String location, String type, Long referencedCatId) {
+        // 校验救助类型广播
+        if ("rescue".equalsIgnoreCase(type)) {
+            boolean hasCat = referencedCatId != null && referencedCatId > 0;
+            boolean hasLocation = location != null && !location.trim().isEmpty();
+            boolean hasImages = images != null && !images.isEmpty();
+            if (!hasCat && !hasLocation && !hasImages) {
+                throw new IllegalArgumentException("发布救助广播必须包含以下之一：猫咪档案、位置信息、图片");
+            }
+        }
+
         String imagesJson = images == null || images.isEmpty() ? null
                 : images.stream().collect(Collectors.joining("\",\"", "[\"", "\"]"));
         SquarePost post = SquarePost.builder()
@@ -47,11 +67,69 @@ public class SquareService {
                 .location(location)
                 .type(type != null ? type : "inquiry")
                 .status("open")
-                .likes(0) // Explicitly set default value to avoid null
+                .likes(0)
                 .userId(userId)
                 .referencedCatId(referencedCatId)
                 .build();
-        return squarePostRepository.save(post);
+        post = squarePostRepository.save(post);
+
+        // 救助类型广播自动创建救助活动
+        if ("rescue".equalsIgnoreCase(type)) {
+            try {
+                RescueActivity activity = rescueService.create(userId, "救助广播-" + (text != null && text.length() > 20 ? text.substring(0, 20) + "..." : text),
+                        text, referencedCatId, post.getId(), null);
+                // 关联救助活动ID到广播
+                post.setRescueActivityId(activity.getId());
+                post = squarePostRepository.save(post);
+            } catch (Exception e) {
+                // 救助活动创建失败不影响广播发布
+            }
+        }
+
+        return post;
+    }
+
+    /**
+     * 从救助活动同步创建广场广播（地图发起救助时调用）
+     */
+    @Transactional
+    public SquarePost createPostFromRescue(Long userId, String text, Long rescueActivityId, Long catId, String location) {
+        SquarePost post = SquarePost.builder()
+                .text(text)
+                .images(null)
+                .location(location)
+                .type("rescue")
+                .status("open")
+                .likes(0)
+                .userId(userId)
+                .referencedCatId(catId != null && catId > 0 ? catId : null)
+                .rescueActivityId(rescueActivityId)
+                .build();
+        post = squarePostRepository.save(post);
+
+        // 更新救助活动的 squarePostId，建立双向关联
+        if (rescueActivityId != null) {
+            var activityOpt = rescueActivityRepository.findById(rescueActivityId);
+            if (activityOpt.isPresent()) {
+                var activity = activityOpt.get();
+                activity.setSquarePostId(post.getId());
+                rescueActivityRepository.save(activity);
+            }
+        }
+
+        return post;
+    }
+
+    /**
+     * 获取猫咪档案的位置信息用于广播定位
+     */
+    public String getCatLocationForPost(Long catId) {
+        if (catId == null || catId <= 0) return null;
+        // 通过 CatReport 获取最新的位置信息
+        return catReportRepository.findFirstByCatIdOrderByReportTimeDesc(catId)
+                .filter(report -> report.getLat() != null && report.getLng() != null)
+                .map(report -> report.getLat() + "," + report.getLng())
+                .orElse(null);
     }
 
     @Transactional
@@ -65,6 +143,9 @@ public class SquareService {
             return false;
         post.setStatus("resolved");
         squarePostRepository.save(post);
+        if (post.getRescueActivityId() != null) {
+            rescueService.updateStatus(post.getRescueActivityId(), "completed", userId);
+        }
         List<Long> commenterIds = squareCommentRepository.findDistinctUserIdsBySquarePostId(postId);
         String snippet = buildSnippet(post.getText());
         String type = "rescue".equals(post.getType()) ? "rescue_response" : "square_reply";
@@ -90,6 +171,7 @@ public class SquareService {
 
         // Role 3 (Admin) can delete all
         if (userRole >= 3) {
+            completeLinkedRescue(post);
             squarePostRepository.delete(post);
             return true;
         }
@@ -97,6 +179,7 @@ public class SquareService {
         // Role 2 (Volunteer) can delete posts by Role 1 and Role 2
         if (userRole == 2) {
             if (authorRole <= 2) {
+                completeLinkedRescue(post);
                 squarePostRepository.delete(post);
                 return true;
             }
@@ -105,6 +188,7 @@ public class SquareService {
 
         // Role 1 (User) can only delete their own posts
         if (post.getUserId().equals(userId)) {
+            completeLinkedRescue(post);
             squarePostRepository.delete(post);
             return true;
         }
@@ -147,5 +231,18 @@ public class SquareService {
         if (t.length() <= 20)
             return t;
         return t.substring(0, 20) + "...";
+    }
+
+    private void completeLinkedRescue(SquarePost post) {
+        if (post.getRescueActivityId() == null) {
+            return;
+        }
+        rescueActivityRepository.findById(post.getRescueActivityId()).ifPresent(activity -> {
+            if (!"completed".equals(activity.getStatus())) {
+                activity.setStatus("completed");
+                activity.setCompletedAt(java.time.Instant.now());
+                rescueActivityRepository.save(activity);
+            }
+        });
     }
 }

@@ -100,6 +100,8 @@ public class CatController {
         m.put("personality", d.personality != null ? d.personality : "");
         m.put("catId", d.catId);
         m.put("matchConfidence", d.matchConfidence);
+        m.put("hasActiveRescue", d.hasActiveRescue);
+        m.put("rescueSquarePostId", d.rescueSquarePostId != null ? d.rescueSquarePostId : 0);
         return m;
     }
 

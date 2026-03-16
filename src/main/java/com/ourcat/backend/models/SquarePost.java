@@ -53,6 +53,10 @@ public class SquarePost {
     @Column(name = "referenced_cat_id")
     private Long referencedCatId;
 
+    /** 关联的救助活动 ID（发布 rescue 类型广播时自动创建） */
+    @Column(name = "rescue_activity_id")
+    private Long rescueActivityId;
+
     @PrePersist
     public void prePersist() {
         if (createdAt == null) createdAt = Instant.now();

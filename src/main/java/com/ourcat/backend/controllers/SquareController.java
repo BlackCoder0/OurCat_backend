@@ -5,6 +5,8 @@ import com.ourcat.backend.models.Cat;
 import com.ourcat.backend.models.SquareComment;
 import com.ourcat.backend.models.SquarePost;
 import com.ourcat.backend.repositories.CatRepository;
+import com.ourcat.backend.repositories.RescueActivityRepository;
+import com.ourcat.backend.services.RescueService;
 import com.ourcat.backend.services.SquareService;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
@@ -28,148 +30,177 @@ public class SquareController {
 
     private final SquareService squareService;
     private final CatRepository catRepository;
+    private final RescueActivityRepository rescueActivityRepository;
+    private final RescueService rescueService;
 
     @GetMapping("/posts")
     public ResponseEntity<Map<String, Object>> listPosts(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(required = false) String sort) {
-        Page<SquarePost> p = squareService.listPosts(page, size, sort);
-        List<Map<String, Object>> items = p.getContent().stream().map(post -> {
-            Map<String, Object> m = new HashMap<>(postToMap(post));
+        Page<SquarePost> pageResult = squareService.listPosts(page, size, sort);
+        List<Map<String, Object>> items = pageResult.getContent().stream().map(post -> {
+            Map<String, Object> item = new HashMap<>(postToMap(post));
             if (post.getReferencedCatId() != null) {
-                catRepository.findById(post.getReferencedCatId()).ifPresent(cat -> m.put("referencedCat", catToRefMap(cat)));
+                catRepository.findById(post.getReferencedCatId()).ifPresent(cat -> item.put("referencedCat", catToRefMap(cat)));
             }
-            return m;
+            return item;
         }).collect(Collectors.toList());
         return ResponseEntity.ok(Map.of(
                 "content", items,
-                "totalPages", p.getTotalPages(),
-                "totalElements", p.getTotalElements()));
+                "totalPages", pageResult.getTotalPages(),
+                "totalElements", pageResult.getTotalElements()));
     }
 
     @GetMapping("/posts/{id}")
     public ResponseEntity<?> getPost(@PathVariable Long id) {
         Optional<SquarePost> opt = squareService.getPost(id);
-        if (opt.isEmpty())
+        if (opt.isEmpty()) {
             return ResponseEntity.notFound().build();
+        }
         SquarePost post = opt.get();
-        Map<String, Object> map = new HashMap<>(postToMap(post));
-        squareService.getAuthor(post.getUserId()).ifPresent(u -> {
-            map.put("authorName", u.getNickname() != null ? u.getNickname() : u.getUsername());
-            map.put("authorAvatar", u.getAvatarUrl());
+        Map<String, Object> result = new HashMap<>(postToMap(post));
+        squareService.getAuthor(post.getUserId()).ifPresent(user -> {
+            result.put("authorName", user.getNickname() != null ? user.getNickname() : user.getUsername());
+            result.put("authorAvatar", user.getAvatarUrl());
         });
         if (post.getReferencedCatId() != null) {
-            catRepository.findById(post.getReferencedCatId()).ifPresent(cat -> map.put("referencedCat", catToRefMap(cat)));
+            catRepository.findById(post.getReferencedCatId()).ifPresent(cat -> result.put("referencedCat", catToRefMap(cat)));
         }
-        return ResponseEntity.ok(map);
+        return ResponseEntity.ok(result);
     }
 
     @PostMapping("/posts")
     public ResponseEntity<?> createPost(@AuthenticationPrincipal UserPrincipal principal,
-            @Valid @RequestBody SquarePostRequest req) {
-        if (principal == null)
+                                        @Valid @RequestBody SquarePostRequest req) {
+        if (principal == null) {
             return ResponseEntity.status(401).build();
-        Long refCatId = req.getReferencedCatId() != null && req.getReferencedCatId() > 0 ? req.getReferencedCatId() : null;
-        SquarePost post = squareService.createPost(
-                principal.getUser().getId(),
-                req.getText(), req.getImages(), req.getLocation(),
-                req.getType() != null ? req.getType() : "inquiry", refCatId);
-        return ResponseEntity.ok(postToMap(post));
+        }
+        try {
+            Long refCatId = req.getReferencedCatId() != null && req.getReferencedCatId() > 0 ? req.getReferencedCatId() : null;
+            SquarePost post = squareService.createPost(
+                    principal.getUser().getId(),
+                    req.getText(),
+                    req.getImages(),
+                    req.getLocation(),
+                    req.getType() != null ? req.getType() : "inquiry",
+                    refCatId);
+            return ResponseEntity.ok(postToMap(post));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
     }
 
     @PostMapping("/posts/{id}/markSolved")
     public ResponseEntity<?> markSolved(@AuthenticationPrincipal UserPrincipal principal,
-            @PathVariable Long id) {
-        if (principal == null)
+                                        @PathVariable Long id) {
+        if (principal == null) {
             return ResponseEntity.status(401).build();
+        }
         boolean ok = squareService.markSolved(id, principal.getUser().getId(), principal.getUser().getRole());
-        if (!ok)
+        if (!ok) {
             return ResponseEntity.status(403).body(Map.of("message", "无权限"));
-        return squareService.getPost(id).map(p -> ResponseEntity.ok(postToMap(p)))
+        }
+        return squareService.getPost(id)
+                .map(post -> ResponseEntity.ok(postToMap(post)))
                 .orElse(ResponseEntity.notFound().build());
     }
 
     @GetMapping("/posts/{id}/comments")
     public ResponseEntity<List<Map<String, Object>>> getComments(@PathVariable Long id,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "50") int size) {
+                                                                 @RequestParam(defaultValue = "0") int page,
+                                                                 @RequestParam(defaultValue = "50") int size) {
         List<SquareComment> comments = squareService.getComments(id, page, size);
-        List<Map<String, Object>> list = comments.stream().map(c -> {
-            Map<String, Object> m = new HashMap<>(Map.of(
-                    "id", c.getId(),
-                    "content", c.getContent(),
-                    "userId", c.getUserId(),
-                    "createdAt", c.getCreatedAt() != null ? c.getCreatedAt().toString() : ""));
-            squareService.getAuthor(c.getUserId()).ifPresent(u -> {
-                m.put("authorName", u.getNickname() != null ? u.getNickname() : u.getUsername());
-                m.put("authorAvatar", u.getAvatarUrl());
+        List<Map<String, Object>> result = comments.stream().map(comment -> {
+            Map<String, Object> item = new HashMap<>(Map.of(
+                    "id", comment.getId(),
+                    "content", comment.getContent(),
+                    "userId", comment.getUserId(),
+                    "createdAt", comment.getCreatedAt() != null ? comment.getCreatedAt().toString() : ""));
+            squareService.getAuthor(comment.getUserId()).ifPresent(user -> {
+                item.put("authorName", user.getNickname() != null ? user.getNickname() : user.getUsername());
+                item.put("authorAvatar", user.getAvatarUrl());
             });
-            return m;
+            return item;
         }).collect(Collectors.toList());
-        return ResponseEntity.ok(list);
+        return ResponseEntity.ok(result);
     }
 
     @PostMapping("/posts/{id}/comments")
     public ResponseEntity<?> addComment(@AuthenticationPrincipal UserPrincipal principal,
-            @PathVariable Long id,
-            @Valid @RequestBody CommentRequest req) {
-        if (principal == null)
+                                        @PathVariable Long id,
+                                        @Valid @RequestBody CommentRequest req) {
+        if (principal == null) {
             return ResponseEntity.status(401).build();
-        SquareComment c = squareService.addComment(id, principal.getUser().getId(), req.getContent());
-        Map<String, Object> m = new HashMap<>(Map.of(
-                "id", c.getId(),
-                "content", c.getContent(),
-                "userId", c.getUserId(),
-                "createdAt", c.getCreatedAt() != null ? c.getCreatedAt().toString() : ""));
-        m.put("authorName", principal.getUser().getNickname() != null ? principal.getUser().getNickname()
+        }
+        SquareComment comment = squareService.addComment(id, principal.getUser().getId(), req.getContent());
+        Map<String, Object> result = new HashMap<>(Map.of(
+                "id", comment.getId(),
+                "content", comment.getContent(),
+                "userId", comment.getUserId(),
+                "createdAt", comment.getCreatedAt() != null ? comment.getCreatedAt().toString() : ""));
+        result.put("authorName", principal.getUser().getNickname() != null
+                ? principal.getUser().getNickname()
                 : principal.getUser().getUsername());
-        return ResponseEntity.ok(m);
+        return ResponseEntity.ok(result);
     }
 
     @DeleteMapping("/posts/{id}")
     public ResponseEntity<?> deletePost(@AuthenticationPrincipal UserPrincipal principal,
-            @PathVariable Long id) {
-        if (principal == null)
+                                        @PathVariable Long id) {
+        if (principal == null) {
             return ResponseEntity.status(401).build();
+        }
         boolean ok = squareService.deletePost(id, principal.getUser().getId(), principal.getUser().getRole());
-        if (!ok)
+        if (!ok) {
             return ResponseEntity.status(403).body(Map.of("message", "无权限或帖子不存在"));
+        }
         return ResponseEntity.ok().build();
     }
 
     private Map<String, Object> postToMap(SquarePost post) {
-        Map<String, Object> m = new HashMap<>();
-        m.put("id", post.getId());
-        m.put("text", post.getText());
-        m.put("images", post.getImages() != null ? post.getImages() : "[]");
-        m.put("location", post.getLocation() != null ? post.getLocation() : "");
-        m.put("type", post.getType());
-        m.put("status", post.getStatus());
-        m.put("likes", post.getLikes());
-        m.put("userId", post.getUserId());
-        m.put("createdAt", post.getCreatedAt() != null ? post.getCreatedAt().toString() : "");
-        m.put("referencedCatId", post.getReferencedCatId());
-        return m;
+        Map<String, Object> result = new HashMap<>();
+        result.put("id", post.getId());
+        result.put("text", post.getText());
+        result.put("images", post.getImages() != null ? post.getImages() : "[]");
+        result.put("location", post.getLocation() != null ? post.getLocation() : "");
+        result.put("type", post.getType());
+        result.put("status", post.getStatus());
+        result.put("likes", post.getLikes());
+        result.put("userId", post.getUserId());
+        result.put("createdAt", post.getCreatedAt() != null ? post.getCreatedAt().toString() : "");
+        result.put("referencedCatId", post.getReferencedCatId());
+        result.put("rescueActivityId", post.getRescueActivityId() != null ? post.getRescueActivityId() : 0);
+        if (post.getRescueActivityId() != null) {
+            rescueActivityRepository.findById(post.getRescueActivityId()).ifPresent(activity -> {
+                result.put("rescueActivityTitle", activity.getTitle());
+                result.put("rescueActivityStatus", activity.getStatus());
+                result.put("rescueActivityCreatedBy", activity.getCreatedBy());
+                result.put("rescueTasks", rescueService.getTasksByActivityId(activity.getId()).stream()
+                        .map(rescueService::taskToMap)
+                        .collect(Collectors.toList()));
+            });
+        }
+        return result;
     }
 
     private Map<String, Object> catToRefMap(Cat cat) {
-        Map<String, Object> m = new HashMap<>();
-        m.put("id", cat.getId());
-        m.put("name", cat.getName() != null ? cat.getName() : "");
-        m.put("primaryImageUrl", cat.getPrimaryImageUrl() != null ? cat.getPrimaryImageUrl() : "");
-        m.put("color", cat.getColor() != null ? cat.getColor() : "");
-        m.put("status", cat.getStatus() != null ? cat.getStatus() : "active");
-        return m;
+        Map<String, Object> result = new HashMap<>();
+        result.put("id", cat.getId());
+        result.put("name", cat.getName() != null ? cat.getName() : "");
+        result.put("primaryImageUrl", cat.getPrimaryImageUrl() != null ? cat.getPrimaryImageUrl() : "");
+        result.put("color", cat.getColor() != null ? cat.getColor() : "");
+        result.put("status", cat.getStatus() != null ? cat.getStatus() : "active");
+        return result;
     }
 
     @Data
     public static class SquarePostRequest {
         @NotBlank
         private String text;
-        private java.util.List<String> images;
+        private List<String> images;
         private String location;
-        private String type; // inquiry, rescue
+        private String type;
         private Long referencedCatId;
     }
 

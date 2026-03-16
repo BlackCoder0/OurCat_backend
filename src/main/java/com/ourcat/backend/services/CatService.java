@@ -2,8 +2,10 @@ package com.ourcat.backend.services;
 
 import com.ourcat.backend.models.Cat;
 import com.ourcat.backend.models.CatReport;
+import com.ourcat.backend.models.RescueActivity;
 import com.ourcat.backend.repositories.CatRepository;
 import com.ourcat.backend.repositories.CatReportRepository;
+import com.ourcat.backend.repositories.RescueActivityRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
@@ -23,9 +25,11 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class CatService {
+    private static final List<String> OPEN_RESCUE_STATUSES = List.of("created", "in_progress");
 
     private final CatRepository catRepository;
     private final CatReportRepository catReportRepository;
+    private final RescueActivityRepository rescueActivityRepository;
     private final AiService aiService;
 
     private static final double MATCH_RADIUS_KM = 15.0;
@@ -440,6 +444,21 @@ public class CatService {
 
     public List<LocationDto> getLocations() {
         List<CatReport> reports = catReportRepository.findAllByOrderByReportTimeDesc();
+        List<Long> catIds = reports.stream()
+                .map(CatReport::getCatId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .collect(Collectors.toList());
+        Map<Long, RescueActivity> activeRescueByCatId = catIds.isEmpty()
+                ? Collections.emptyMap()
+                : rescueActivityRepository.findByCatIdInAndStatusInOrderByCreatedAtDesc(catIds, OPEN_RESCUE_STATUSES)
+                .stream()
+                .filter(activity -> activity.getCatId() != null)
+                .collect(Collectors.toMap(
+                        RescueActivity::getCatId,
+                        activity -> activity,
+                        (left, right) -> left,
+                        HashMap::new));
         return reports.stream().map(r -> {
             LocationDto dto = new LocationDto(r.getId(), r.getLat(), r.getLng(), r.getImageUrl(), r.getDescription(),
                     r.getReportTime() != null ? r.getReportTime().toString() : "", r.getUserId());
@@ -448,6 +467,9 @@ public class CatService {
             dto.setColor(r.getColor());
             dto.setFeature(r.getFeature());
             dto.setPersonality(r.getPersonality());
+            RescueActivity activity = r.getCatId() != null ? activeRescueByCatId.get(r.getCatId()) : null;
+            dto.setHasActiveRescue(activity != null);
+            dto.setRescueSquarePostId(activity != null ? activity.getSquarePostId() : null);
             return dto;
         }).collect(Collectors.toList());
     }
@@ -655,6 +677,15 @@ public class CatService {
             result.put("reportCount", cat.getReportCount());
             result.put("hasEmbedding", cat.getAiEmbedding() != null && cat.getAiEmbedding().length > 0);
             result.put("createdAt", cat.getCreatedAt() != null ? cat.getCreatedAt().toString() : "");
+            RescueActivity activeRescue = rescueActivityRepository
+                    .findByCatIdAndStatusInOrderByCreatedAtDesc(catId, OPEN_RESCUE_STATUSES)
+                    .stream()
+                    .findFirst()
+                    .orElse(null);
+            result.put("hasActiveRescue", activeRescue != null);
+            result.put("rescueSquarePostId", activeRescue != null && activeRescue.getSquarePostId() != null
+                    ? activeRescue.getSquarePostId()
+                    : 0);
 
             List<CatReport> reports = catReportRepository.findByCatIdOrderByReportTimeDesc(catId);
             List<Map<String, Object>> reportHistory = reports.stream().map(r -> {
@@ -768,6 +799,8 @@ public class CatService {
         public String personality;
         public Long catId;
         public Float matchConfidence;
+        public boolean hasActiveRescue;
+        public Long rescueSquarePostId;
 
         public LocationDto(long id, double lat, double lng, String imageUrl, String description, String reportTime,
                 long userId) {
@@ -798,6 +831,14 @@ public class CatService {
 
         public void setMatchConfidence(Float matchConfidence) {
             this.matchConfidence = matchConfidence;
+        }
+
+        public void setHasActiveRescue(boolean hasActiveRescue) {
+            this.hasActiveRescue = hasActiveRescue;
+        }
+
+        public void setRescueSquarePostId(Long rescueSquarePostId) {
+            this.rescueSquarePostId = rescueSquarePostId;
         }
     }
 }
