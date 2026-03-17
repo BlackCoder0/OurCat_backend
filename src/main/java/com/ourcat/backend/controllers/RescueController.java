@@ -57,8 +57,16 @@ public class RescueController {
                         postText = req.getTitle() + "\n\n" + req.getDescription();
                     }
                     String location = null;
-                    if (req.getCatId() != null && req.getCatId() > 0) {
-                        // 获取猫咪档案的位置信息
+                    Double lat = req.getLatitude();
+                    Double lng = req.getLongitude();
+                    String locationName = req.getLocationName();
+                    if (lat != null && lng != null) {
+                        String base = lat + "," + lng;
+                        String name = locationName != null ? locationName.trim() : "";
+                        location = name.isEmpty() ? base : base + " " + name;
+                    } else if (locationName != null && !locationName.trim().isEmpty()) {
+                        location = locationName.trim();
+                    } else if (req.getCatId() != null && req.getCatId() > 0) {
                         location = squareService.getCatLocationForPost(req.getCatId());
                     }
                     squareService.createPostFromRescue(
@@ -286,5 +294,8 @@ public class RescueController {
         private Long catId;
         private Long squarePostId;
         private String urgency;
+        private Double latitude;
+        private Double longitude;
+        private String locationName;
     }
 }

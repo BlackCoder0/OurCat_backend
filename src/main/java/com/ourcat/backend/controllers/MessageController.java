@@ -53,4 +53,11 @@ public class MessageController {
         messageService.markRead(id, principal.getUser().getId());
         return ResponseEntity.ok().build();
     }
+
+    @PostMapping("/readAll")
+    public ResponseEntity<Map<String, Object>> markAllRead(@AuthenticationPrincipal UserPrincipal principal) {
+        if (principal == null) return ResponseEntity.status(401).build();
+        int updated = messageService.markAllRead(principal.getUser().getId());
+        return ResponseEntity.ok(Map.of("updated", updated));
+    }
 }

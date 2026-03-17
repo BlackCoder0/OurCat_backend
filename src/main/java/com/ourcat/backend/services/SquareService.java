@@ -155,6 +155,7 @@ public class SquareService {
         squarePostRepository.save(post);
         if (post.getRescueActivityId() != null) {
             rescueService.updateStatus(post.getRescueActivityId(), "completed", userId);
+            notifyRescueTaskAssignees(post.getRescueActivityId(), postId, post.getText(), userId);
         }
         List<Long> commenterIds = squareCommentRepository.findDistinctUserIdsBySquarePostId(postId);
         String snippet = buildSnippet(post.getText());
@@ -166,6 +167,19 @@ public class SquareService {
             }
         }
         return true;
+    }
+
+    private void notifyRescueTaskAssignees(Long activityId, Long postId, String postText, Long operatorId) {
+        java.util.Set<Long> notified = new java.util.HashSet<>();
+        rescueService.getTasksByActivityId(activityId).forEach(task -> {
+            Long assigneeId = task.getAssigneeUserId();
+            if (assigneeId == null || !notified.add(assigneeId)) {
+                return;
+            }
+            String snippet = buildSnippet(postText);
+            String text = snippet.isEmpty() ? "您接到的救助任务已解决" : "您接到的救助任务已解决: " + snippet;
+            messageService.create(assigneeId, "rescue_solved", text, "square_post", postId);
+        });
     }
 
     private boolean canMarkSolvedRescue(SquarePost post, Long userId) {

@@ -32,6 +32,11 @@ public class MessageService {
         });
     }
 
+    @Transactional
+    public int markAllRead(Long userId) {
+        return messageRepository.markAllRead(userId);
+    }
+
     public Long create(Long userId, String type, String content) {
         return create(userId, type, content, null, null);
     }
