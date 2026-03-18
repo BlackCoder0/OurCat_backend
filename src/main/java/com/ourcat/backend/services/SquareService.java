@@ -155,6 +155,7 @@ public class SquareService {
         squarePostRepository.save(post);
         if (post.getRescueActivityId() != null) {
             rescueService.updateStatus(post.getRescueActivityId(), "completed", userId);
+            rescueService.markTasksDoneForActivity(post.getRescueActivityId(), userId);
             notifyRescueTaskAssignees(post.getRescueActivityId(), postId, post.getText(), userId);
         }
         List<Long> commenterIds = squareCommentRepository.findDistinctUserIdsBySquarePostId(postId);

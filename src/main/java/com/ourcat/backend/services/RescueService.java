@@ -311,6 +311,30 @@ public class RescueService {
     }
 
     @Transactional
+    public int markTasksDoneForActivity(Long activityId, Long operatorId) {
+        if (activityId == null || activityId <= 0) {
+            return 0;
+        }
+        int updated = 0;
+        List<RescueTask> tasks = rescueTaskRepository.findByRescueActivityIdOrderByAssignedAtAsc(activityId);
+        for (RescueTask task : tasks) {
+            if (task == null) {
+                continue;
+            }
+            String status = task.getStatus() != null ? task.getStatus() : "";
+            if ("done".equalsIgnoreCase(status)) {
+                continue;
+            }
+            task.setStatus("done");
+            task.setCompletedAt(Instant.now());
+            rescueTaskRepository.save(task);
+            createTaskLog(task.getId(), operatorId, "system", "事件已解决", null);
+            updated++;
+        }
+        return updated;
+    }
+
+    @Transactional
     public Optional<RescueTask> updateTask(Long taskId, Long userId, String status, String completionNote,
             String completionImages) {
         return rescueTaskRepository.findById(taskId)
@@ -375,6 +399,29 @@ public class RescueService {
         result.put("completedAt", task.getCompletedAt());
         result.put("completionNote", task.getCompletionNote());
         result.put("completionImages", task.getCompletionImages());
+        if (task.getRescueActivityId() != null) {
+            rescueActivityRepository.findById(task.getRescueActivityId()).ifPresent(activity -> {
+                result.put("rescueActivityTitle", activity.getTitle() != null ? activity.getTitle() : "");
+                result.put("rescueActivityUrgency", activity.getUrgency() != null ? activity.getUrgency() : "normal");
+                result.put("rescueActivityStatus", activity.getStatus() != null ? activity.getStatus() : "created");
+                result.put("squarePostId", activity.getSquarePostId() != null ? activity.getSquarePostId() : 0L);
+                if (activity.getCatId() != null && activity.getCatId() > 0) {
+                    catRepository.findById(activity.getCatId()).ifPresent(cat -> {
+                        result.put("catId", cat.getId());
+                        result.put("catName", cat.getName() != null ? cat.getName() : "");
+                        result.put("catImageUrl", cat.getPrimaryImageUrl() != null ? cat.getPrimaryImageUrl() : "");
+                    });
+                }
+                if (activity.getSquarePostId() != null && activity.getSquarePostId() > 0) {
+                    squarePostRepository.findById(activity.getSquarePostId()).ifPresent(post -> {
+                        result.put("squarePostStatus", post.getStatus() != null ? post.getStatus() : "open");
+                        result.put("squarePostType", post.getType() != null ? post.getType() : "");
+                        result.put("squarePostLocation", post.getLocation() != null ? post.getLocation() : "");
+                        result.put("squarePostSnippet", buildSnippet(post.getText()));
+                    });
+                }
+            });
+        }
         if (task.getAssigneeUserId() != null) {
             userRepository.findById(task.getAssigneeUserId()).ifPresent(u -> {
                 result.put("assigneeName", u.getNickname() != null ? u.getNickname() : u.getUsername());
@@ -388,6 +435,17 @@ public class RescueService {
             });
         }
         return result;
+    }
+
+    private String buildSnippet(String text) {
+        if (text == null) {
+            return "";
+        }
+        String t = text.trim().replaceAll("\\s+", " ");
+        if (t.isEmpty()) {
+            return "";
+        }
+        return t.length() > 26 ? t.substring(0, 26) + "..." : t;
     }
 
     private RescueTaskLog createTaskLog(Long taskId, Long userId, String logType, String content, String images) {
