@@ -52,7 +52,7 @@ public class RescueController {
                     req.getUrgency(), req.getProblemType());
 
             // 同步创建广场救助广播
-            if (activity.getId() != null) {
+            if (activity.getId() != null && (req.getSquarePostId() == null || req.getSquarePostId() <= 0)) {
                 try {
                     String postText = req.getTitle();
                     if (req.getDescription() != null && !req.getDescription().isEmpty()) {
