@@ -49,7 +49,7 @@ public class SquareService {
 
     @Transactional
     public SquarePost createPost(Long userId, String text, List<String> images, String location, String type,
-            Long referencedCatId) {
+            Long referencedCatId, String problemType) {
         // 校验救助类型广播
         if ("rescue".equalsIgnoreCase(type)) {
             boolean hasCat = referencedCatId != null && referencedCatId > 0;
@@ -79,7 +79,7 @@ public class SquareService {
             try {
                 RescueActivity activity = rescueService.create(userId,
                         "救助广播-" + (text != null && text.length() > 20 ? text.substring(0, 20) + "..." : text),
-                        text, referencedCatId, post.getId(), null);
+                        text, referencedCatId, post.getId(), null, problemType);
                 // 关联救助活动ID到广播
                 post.setRescueActivityId(activity.getId());
                 post = squarePostRepository.save(post);

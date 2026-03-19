@@ -39,6 +39,9 @@ public class RescueActivity {
     @Column(name = "organization_id")
     private Long organizationId;
 
+    @Column(name = "problem_type", length = 32)
+    private String problemType;
+
     @Column(nullable = false, length = 32)
     @Builder.Default
     private String urgency = "normal";

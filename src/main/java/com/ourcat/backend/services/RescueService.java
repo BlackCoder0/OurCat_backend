@@ -24,6 +24,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.time.YearMonth;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -37,6 +39,8 @@ public class RescueService {
 
     private static final long DEFAULT_ORG_ID = 1L;
     private static final List<String> OPEN_STATUSES = List.of("created", "in_progress");
+    private static final List<String> PROBLEM_TYPES = List.of("受伤", "疾病", "困境", "其他");
+    private static final List<String> CAT_STATUSES_PROTECTED_FROM_AUTO_SYNC = List.of("收养", "已故");
 
     private final RescueActivityRepository rescueActivityRepository;
     private final RescueTaskRepository rescueTaskRepository;
@@ -50,26 +54,32 @@ public class RescueService {
 
     @Transactional
     public RescueActivity create(Long userId, String title, String description, Long catId, Long squarePostId,
-            String urgency) {
+            String urgency, String problemType) {
         if ((catId == null || catId <= 0) && (squarePostId == null || squarePostId <= 0)) {
             throw new IllegalArgumentException("请关联猫咪或广场救助帖");
         }
-        if (catId != null && catId > 0
-                && !rescueActivityRepository.findByCatIdAndStatusInOrderByCreatedAtDesc(catId, OPEN_STATUSES)
+        Long finalCatId = catId != null && catId > 0 ? catId : null;
+        Long finalSquarePostId = squarePostId != null && squarePostId > 0 ? squarePostId : null;
+        if (finalCatId != null
+                && !rescueActivityRepository.findByCatIdAndStatusInOrderByCreatedAtDesc(finalCatId, OPEN_STATUSES)
                         .isEmpty()) {
             throw new IllegalStateException("当前处于待救助状态");
         }
+        String normalizedProblemType = normalizeProblemType(problemType);
         RescueActivity activity = RescueActivity.builder()
                 .title(title != null ? title : "救助")
                 .description(description)
-                .catId(catId != null && catId > 0 ? catId : null)
-                .squarePostId(squarePostId != null && squarePostId > 0 ? squarePostId : null)
+                .catId(finalCatId)
+                .squarePostId(finalSquarePostId)
                 .organizationId(DEFAULT_ORG_ID)
                 .urgency(urgency != null && "urgent".equalsIgnoreCase(urgency) ? "urgent" : "normal")
+                .problemType(normalizedProblemType)
                 .status("created")
                 .createdBy(userId)
                 .build();
-        return rescueActivityRepository.save(activity);
+        RescueActivity saved = rescueActivityRepository.save(activity);
+        syncCatStatusFromProblemType(finalCatId, normalizedProblemType);
+        return saved;
     }
 
     public Page<RescueActivity> list(int page, int size, String status, String urgency) {
@@ -99,6 +109,9 @@ public class RescueService {
                 activity.setCompletedAt(Instant.now());
             }
             RescueActivity saved = rescueActivityRepository.save(activity);
+            if ("completed".equals(status)) {
+                syncCatStatusAfterCompleted(saved.getCatId());
+            }
             if (operatorUserId != null && !operatorUserId.equals(activity.getCreatedBy())) {
                 String statusText;
                 if ("created".equals(status)) {
@@ -116,6 +129,53 @@ public class RescueService {
                         id);
             }
             return saved;
+        });
+    }
+
+    private String normalizeProblemType(String problemType) {
+        if (problemType == null) {
+            return null;
+        }
+        String normalized = problemType.trim();
+        if (normalized.isEmpty()) {
+            return null;
+        }
+        if ("生病".equals(normalized)) {
+            return "疾病";
+        }
+        if (PROBLEM_TYPES.contains(normalized)) {
+            return normalized;
+        }
+        return "其他";
+    }
+
+    private void syncCatStatusFromProblemType(Long catId, String problemType) {
+        if (catId == null || problemType == null) {
+            return;
+        }
+        catRepository.findById(catId).ifPresent(cat -> {
+            String currentStatus = cat.getStatus();
+            if (currentStatus != null && CAT_STATUSES_PROTECTED_FROM_AUTO_SYNC.contains(currentStatus)) {
+                return;
+            }
+            cat.setStatus(problemType);
+            catRepository.save(cat);
+        });
+    }
+
+    private void syncCatStatusAfterCompleted(Long catId) {
+        if (catId == null) {
+            return;
+        }
+        catRepository.findById(catId).ifPresent(cat -> {
+            String currentStatus = cat.getStatus();
+            if (currentStatus != null && CAT_STATUSES_PROTECTED_FROM_AUTO_SYNC.contains(currentStatus)) {
+                return;
+            }
+            if (currentStatus != null && PROBLEM_TYPES.contains(currentStatus)) {
+                cat.setStatus("活跃");
+                catRepository.save(cat);
+            }
         });
     }
 
@@ -214,21 +274,31 @@ public class RescueService {
         result.put("squarePostId", activity.getSquarePostId());
         result.put("organizationId", activity.getOrganizationId());
         result.put("urgency", activity.getUrgency());
+        result.put("problemType", activity.getProblemType());
         result.put("status", activity.getStatus());
         result.put("createdBy", activity.getCreatedBy());
         result.put("createdAt", activity.getCreatedAt());
         result.put("completedAt", activity.getCompletedAt());
+        result.put("updatedAt", activity.getCompletedAt());
         if (creator != null) {
             result.put("creatorName", creator.getNickname() != null ? creator.getNickname() : creator.getUsername());
             result.put("creatorAvatar", creator.getAvatarUrl() != null ? creator.getAvatarUrl() : "");
+            result.put("createdByName", creator.getNickname() != null ? creator.getNickname() : creator.getUsername());
         }
         if (activity.getCatId() != null) {
             catRepository.findById(activity.getCatId()).ifPresent(cat -> result.put("cat", toCatRef(cat)));
+            catReportRepository.findFirstByCatIdOrderByReportTimeDesc(activity.getCatId()).ifPresent(report -> {
+                if (report.getLat() != null && report.getLng() != null) {
+                    result.put("lat", report.getLat());
+                    result.put("lng", report.getLng());
+                }
+            });
         }
         if (activity.getSquarePostId() != null) {
             squarePostRepository.findById(activity.getSquarePostId()).ifPresent(post -> {
                 String text = post.getText() != null ? post.getText() : "";
                 result.put("squarePostTitle", text.length() > 50 ? text.substring(0, 50) + "..." : text);
+                result.put("squarePostLocation", post.getLocation() != null ? post.getLocation() : "");
             });
         }
         List<RescueTask> tasks = rescueTaskRepository.findByRescueActivityIdOrderByAssignedAtAsc(activity.getId());
@@ -538,5 +608,117 @@ public class RescueService {
         private double lng;
         private Long catId;
         private Long squarePostId;
+    }
+
+    public Map<String, Object> getStatistics() {
+        Map<String, Object> stats = new HashMap<>();
+
+        long totalActivities = rescueActivityRepository.count();
+        long completedActivities = rescueActivityRepository.countByStatus("completed");
+        long inProgressActivities = rescueActivityRepository.countByStatusIn(OPEN_STATUSES);
+
+        stats.put("totalActivities", totalActivities);
+        stats.put("completedActivities", completedActivities);
+        stats.put("inProgressActivities", inProgressActivities);
+
+        List<Map<String, Object>> topContributors = getTopContributors();
+        stats.put("topContributors", topContributors);
+
+        stats.put("problemTypeDistribution", getProblemTypeDistribution());
+        stats.put("monthlyTrendAll", getMonthlyTrend(6, false));
+        stats.put("monthlyTrendCompleted", getMonthlyTrend(6, true));
+
+        return stats;
+    }
+
+    private List<Map<String, Object>> getProblemTypeDistribution() {
+        Map<String, Long> countByType = new HashMap<>();
+        countByType.put("受伤", 0L);
+        countByType.put("疾病", 0L);
+        countByType.put("困境", 0L);
+        countByType.put("其他", 0L);
+
+        for (RescueActivity a : rescueActivityRepository.findAll()) {
+            String t = a.getProblemType() != null ? a.getProblemType().trim() : "";
+            if (t.isEmpty()) {
+                countByType.merge("其他", 1L, Long::sum);
+                continue;
+            }
+            if ("生病".equals(t)) {
+                t = "疾病";
+            }
+            if (!countByType.containsKey(t)) {
+                t = "其他";
+            }
+            countByType.merge(t, 1L, Long::sum);
+        }
+
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (String key : List.of("受伤", "疾病", "困境", "其他")) {
+            result.add(Map.of("type", key, "count", countByType.getOrDefault(key, 0L)));
+        }
+        return result;
+    }
+
+    private List<Map<String, Object>> getMonthlyTrend(int months, boolean completedOnly) {
+        int safeMonths = Math.max(1, Math.min(months, 24));
+        ZoneId zone = ZoneId.systemDefault();
+        YearMonth current = YearMonth.now(zone);
+
+        Map<YearMonth, Long> countByMonth = new HashMap<>();
+        for (int i = 0; i < safeMonths; i++) {
+            countByMonth.put(current.minusMonths(i), 0L);
+        }
+        for (RescueActivity a : rescueActivityRepository.findAll()) {
+            Instant time = completedOnly ? a.getCompletedAt() : a.getCreatedAt();
+            if (completedOnly) {
+                if (!"completed".equalsIgnoreCase(a.getStatus()) || time == null) {
+                    continue;
+                }
+            } else {
+                if (time == null) {
+                    continue;
+                }
+            }
+            YearMonth m = YearMonth.from(time.atZone(zone));
+            if (countByMonth.containsKey(m)) {
+                countByMonth.merge(m, 1L, Long::sum);
+            }
+        }
+
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (int i = safeMonths - 1; i >= 0; i--) {
+            YearMonth m = current.minusMonths(i);
+            result.add(Map.of("month", m.toString(), "count", countByMonth.getOrDefault(m, 0L)));
+        }
+        return result;
+    }
+
+    private List<Map<String, Object>> getTopContributors() {
+        List<RescueTask> allTasks = rescueTaskRepository.findAll();
+        Map<Long, Long> contributorCount = new HashMap<>();
+
+        for (RescueTask task : allTasks) {
+            if (task.getAssigneeUserId() != null) {
+                contributorCount.merge(task.getAssigneeUserId(), 1L, Long::sum);
+            }
+        }
+
+        return contributorCount.entrySet().stream()
+                .sorted((a, b) -> Long.compare(b.getValue(), a.getValue()))
+                .limit(10)
+                .map(entry -> {
+                    Map<String, Object> item = new HashMap<>();
+                    item.put("userId", entry.getKey());
+                    item.put("taskCount", entry.getValue());
+                    item.put("count", entry.getValue());
+                    userRepository.findById(entry.getKey()).ifPresent(user -> {
+                        item.put("username", user.getUsername());
+                        item.put("nickname", user.getNickname() != null ? user.getNickname() : user.getUsername());
+                        item.put("avatarUrl", user.getAvatarUrl() != null ? user.getAvatarUrl() : "");
+                    });
+                    return item;
+                })
+                .collect(Collectors.toList());
     }
 }

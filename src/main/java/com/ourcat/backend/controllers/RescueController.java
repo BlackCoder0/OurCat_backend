@@ -6,6 +6,7 @@ import com.ourcat.backend.models.RescueTask;
 import com.ourcat.backend.models.User;
 import com.ourcat.backend.repositories.RescueContactRepository;
 import com.ourcat.backend.repositories.RescueGuideRepository;
+import com.ourcat.backend.repositories.RescueArticleRepository;
 import com.ourcat.backend.repositories.UserRepository;
 import com.ourcat.backend.services.RescueService;
 import com.ourcat.backend.services.SquareService;
@@ -36,6 +37,7 @@ public class RescueController {
     private final UserRepository userRepository;
     private final RescueGuideRepository rescueGuideRepository;
     private final RescueContactRepository rescueContactRepository;
+    private final RescueArticleRepository rescueArticleRepository;
 
     @PostMapping("/activities")
     public ResponseEntity<?> createActivity(@AuthenticationPrincipal UserPrincipal principal,
@@ -47,7 +49,7 @@ public class RescueController {
                     principal.getUser().getId(),
                     req.getTitle(), req.getDescription(),
                     req.getCatId(), req.getSquarePostId(),
-                    req.getUrgency());
+                    req.getUrgency(), req.getProblemType());
 
             // 同步创建广场救助广播
             if (activity.getId() != null) {
@@ -279,6 +281,7 @@ public class RescueController {
         m.put("catId", a.getCatId());
         m.put("squarePostId", a.getSquarePostId());
         m.put("urgency", a.getUrgency());
+        m.put("problemType", a.getProblemType());
         m.put("status", a.getStatus());
         m.put("createdBy", a.getCreatedBy());
         m.put("createdAt", a.getCreatedAt());
@@ -294,8 +297,51 @@ public class RescueController {
         private Long catId;
         private Long squarePostId;
         private String urgency;
+        private String problemType;
         private Double latitude;
         private Double longitude;
         private String locationName;
+    }
+
+    @GetMapping("/statistics")
+    public ResponseEntity<Map<String, Object>> getStatistics() {
+        return ResponseEntity.ok(rescueService.getStatistics());
+    }
+
+    @GetMapping("/articles")
+    public ResponseEntity<?> getArticles(@RequestParam(required = false) String category) {
+        List<Map<String, Object>> list;
+        if (category != null && !category.isEmpty()) {
+            list = rescueArticleRepository.findByCategoryOrderBySortOrderAsc(category).stream()
+                    .map(a -> Map.<String, Object>of(
+                            "id", a.getId(),
+                            "title", a.getTitle(),
+                            "content", a.getContent(),
+                            "category", a.getCategory() != null ? a.getCategory() : "",
+                            "sortOrder", a.getSortOrder()))
+                    .collect(Collectors.toList());
+        } else {
+            list = rescueArticleRepository.findAllByOrderBySortOrderAsc().stream()
+                    .map(a -> Map.<String, Object>of(
+                            "id", a.getId(),
+                            "title", a.getTitle(),
+                            "content", a.getContent(),
+                            "category", a.getCategory() != null ? a.getCategory() : "",
+                            "sortOrder", a.getSortOrder()))
+                    .collect(Collectors.toList());
+        }
+        return ResponseEntity.ok(list);
+    }
+
+    @GetMapping("/articles/{id}")
+    public ResponseEntity<?> getArticle(@PathVariable Long id) {
+        return rescueArticleRepository.findById(id)
+                .map(a -> ResponseEntity.<Object>ok(Map.of(
+                        "id", a.getId(),
+                        "title", a.getTitle(),
+                        "content", a.getContent(),
+                        "category", a.getCategory() != null ? a.getCategory() : "",
+                        "sortOrder", a.getSortOrder())))
+                .orElse(ResponseEntity.notFound().build());
     }
 }

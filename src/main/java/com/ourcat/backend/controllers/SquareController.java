@@ -84,7 +84,8 @@ public class SquareController {
                     req.getImages(),
                     req.getLocation(),
                     req.getType() != null ? req.getType() : "inquiry",
-                    refCatId);
+                    refCatId,
+                    req.getProblemType());
             return ResponseEntity.ok(postToMap(post));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
@@ -202,6 +203,7 @@ public class SquareController {
         private String location;
         private String type;
         private Long referencedCatId;
+        private String problemType;
     }
 
     @Data

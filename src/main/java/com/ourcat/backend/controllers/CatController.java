@@ -230,7 +230,7 @@ public class CatController {
         m.put("color", cat.getColor() != null ? cat.getColor() : "");
         m.put("feature", cat.getFeature() != null ? cat.getFeature() : "");
         m.put("personality", cat.getPersonality() != null ? cat.getPersonality() : "");
-        m.put("status", cat.getStatus() != null ? cat.getStatus() : "active");
+        m.put("status", cat.getStatus() != null ? cat.getStatus() : "活跃");
         m.put("primaryImageUrl", cat.getPrimaryImageUrl() != null ? cat.getPrimaryImageUrl() : "");
         m.put("reportCount", cat.getReportCount() != null ? cat.getReportCount() : 0);
         m.put("hasEmbedding", cat.getAiEmbedding() != null && cat.getAiEmbedding().length > 0);

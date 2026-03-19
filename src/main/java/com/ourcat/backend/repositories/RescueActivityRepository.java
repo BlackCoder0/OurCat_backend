@@ -29,4 +29,8 @@ public interface RescueActivityRepository extends JpaRepository<RescueActivity, 
     List<RescueActivity> findByOrganizationIdAndStatusInOrderByCreatedAtDesc(Long organizationId, List<String> statuses);
 
     List<RescueActivity> findByCatIdOrderByCreatedAtDesc(Long catId);
+
+    long countByStatus(String status);
+
+    long countByStatusIn(List<String> statuses);
 }
