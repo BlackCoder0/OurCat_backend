@@ -244,7 +244,8 @@ public class RescueController {
                 "lat", d.getLat(),
                 "lng", d.getLng(),
                 "catId", d.getCatId() != null ? d.getCatId() : 0,
-                "squarePostId", d.getSquarePostId() != null ? d.getSquarePostId() : 0)).collect(Collectors.toList());
+                "squarePostId", d.getSquarePostId() != null ? d.getSquarePostId() : 0,
+                "imageUrl", d.getImageUrl() != null ? d.getImageUrl() : "")).collect(Collectors.toList());
         return ResponseEntity.ok(result);
     }
 

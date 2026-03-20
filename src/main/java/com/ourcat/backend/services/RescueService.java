@@ -31,11 +31,14 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 public class RescueService {
+    private static final Pattern JSON_STRING_PATTERN = Pattern.compile("\"([^\"]+)\"");
 
     private static final long DEFAULT_ORG_ID = 1L;
     private static final List<String> OPEN_STATUSES = List.of("created", "in_progress");
@@ -226,7 +229,8 @@ public class RescueService {
                         report.getLat(),
                         report.getLng(),
                         activity.getCatId(),
-                        activity.getSquarePostId()));
+                        activity.getSquarePostId(),
+                        resolveActivityImageUrl(activity)));
             }
         }
 
@@ -258,7 +262,8 @@ public class RescueService {
                         lat,
                         lng,
                         activity.getCatId(),
-                        activity.getSquarePostId()));
+                        activity.getSquarePostId(),
+                        resolveActivityImageUrl(activity)));
             } catch (NumberFormatException ignored) {
             }
         }
@@ -280,6 +285,7 @@ public class RescueService {
         result.put("createdAt", activity.getCreatedAt());
         result.put("completedAt", activity.getCompletedAt());
         result.put("updatedAt", activity.getCompletedAt());
+        result.put("imageUrl", resolveActivityImageUrl(activity));
         if (creator != null) {
             result.put("creatorName", creator.getNickname() != null ? creator.getNickname() : creator.getUsername());
             result.put("creatorAvatar", creator.getAvatarUrl() != null ? creator.getAvatarUrl() : "");
@@ -304,6 +310,47 @@ public class RescueService {
         List<RescueTask> tasks = rescueTaskRepository.findByRescueActivityIdOrderByAssignedAtAsc(activity.getId());
         result.put("tasks", tasks.stream().map(this::taskToMap).collect(Collectors.toList()));
         return result;
+    }
+
+    private String resolveActivityImageUrl(RescueActivity activity) {
+        if (activity == null) {
+            return "";
+        }
+        if (activity.getCatId() != null && activity.getCatId() > 0) {
+            Optional<CatReport> latestReport = catReportRepository.findFirstByCatIdOrderByReportTimeDesc(activity.getCatId());
+            if (latestReport.isPresent()) {
+                String reportImageUrl = latestReport.get().getImageUrl();
+                if (reportImageUrl != null && !reportImageUrl.isBlank()) {
+                    return reportImageUrl;
+                }
+            }
+            Optional<Cat> catOpt = catRepository.findById(activity.getCatId());
+            if (catOpt.isPresent()) {
+                String primaryImageUrl = catOpt.get().getPrimaryImageUrl();
+                if (primaryImageUrl != null && !primaryImageUrl.isBlank()) {
+                    return primaryImageUrl;
+                }
+            }
+        }
+        if (activity.getSquarePostId() != null && activity.getSquarePostId() > 0) {
+            Optional<SquarePost> postOpt = squarePostRepository.findById(activity.getSquarePostId());
+            if (postOpt.isPresent()) {
+                return extractFirstImageUrl(postOpt.get().getImages());
+            }
+        }
+        return "";
+    }
+
+    private String extractFirstImageUrl(String imagesJson) {
+        if (imagesJson == null || imagesJson.isBlank()) {
+            return "";
+        }
+        Matcher matcher = JSON_STRING_PATTERN.matcher(imagesJson);
+        if (matcher.find()) {
+            String imageUrl = matcher.group(1);
+            return imageUrl != null ? imageUrl : "";
+        }
+        return "";
     }
 
     public List<RescueTask> getTasksByActivityId(Long activityId) {
@@ -608,6 +655,7 @@ public class RescueService {
         private double lng;
         private Long catId;
         private Long squarePostId;
+        private String imageUrl;
     }
 
     public Map<String, Object> getStatistics() {
