@@ -159,6 +159,30 @@ public class SquareController {
         return ResponseEntity.ok().build();
     }
 
+    @GetMapping("/my/comments")
+    public ResponseEntity<?> myComments(@AuthenticationPrincipal UserPrincipal principal,
+                                        @RequestParam(defaultValue = "0") int page,
+                                        @RequestParam(defaultValue = "20") int size) {
+        if (principal == null) {
+            return ResponseEntity.status(401).build();
+        }
+        Page<SquareComment> p = squareService.getCommentsByUserId(principal.getUser().getId(), page, size);
+        List<Map<String, Object>> items = p.getContent().stream().map(c -> {
+            Map<String, Object> m = new HashMap<>();
+            m.put("id", c.getId());
+            m.put("content", c.getContent());
+            m.put("squarePostId", c.getSquarePostId());
+            m.put("createdAt", c.getCreatedAt() != null ? c.getCreatedAt().toString() : "");
+            m.put("source", "square");
+            squareService.getPost(c.getSquarePostId()).ifPresent(post -> m.put("postTitle", snippet(post.getText())));
+            return m;
+        }).collect(Collectors.toList());
+        return ResponseEntity.ok(Map.of(
+                "content", items,
+                "totalPages", p.getTotalPages(),
+                "totalElements", p.getTotalElements()));
+    }
+
     private Map<String, Object> postToMap(SquarePost post) {
         Map<String, Object> result = new HashMap<>();
         result.put("id", post.getId());
@@ -183,6 +207,20 @@ public class SquareController {
             });
         }
         return result;
+    }
+
+    private String snippet(String text) {
+        if (text == null) {
+            return "";
+        }
+        String t = text.trim();
+        if (t.isEmpty()) {
+            return "";
+        }
+        if (t.length() <= 20) {
+            return t;
+        }
+        return t.substring(0, 20) + "...";
     }
 
     private Map<String, Object> catToRefMap(Cat cat) {

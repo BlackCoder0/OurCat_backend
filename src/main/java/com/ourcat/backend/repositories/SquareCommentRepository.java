@@ -1,6 +1,7 @@
 package com.ourcat.backend.repositories;
 
 import com.ourcat.backend.models.SquareComment;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -13,6 +14,8 @@ public interface SquareCommentRepository extends JpaRepository<SquareComment, Lo
     List<SquareComment> findBySquarePostIdOrderByCreatedAtAsc(Long squarePostId, Pageable pageable);
 
     void deleteBySquarePostId(Long squarePostId);
+
+    Page<SquareComment> findByUserIdOrderByCreatedAtDesc(Long userId, Pageable pageable);
 
     @Query("select distinct c.userId from SquareComment c where c.squarePostId = :postId")
     List<Long> findDistinctUserIdsBySquarePostId(@Param("postId") Long postId);

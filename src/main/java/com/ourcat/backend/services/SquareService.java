@@ -249,6 +249,10 @@ public class SquareService {
         return squareCommentRepository.findBySquarePostIdOrderByCreatedAtAsc(postId, PageRequest.of(page, size));
     }
 
+    public Page<SquareComment> getCommentsByUserId(Long userId, int page, int size) {
+        return squareCommentRepository.findByUserIdOrderByCreatedAtDesc(userId, PageRequest.of(page, size));
+    }
+
     @Transactional
     public SquareComment addComment(Long postId, Long userId, String content) {
         SquareComment c = new SquareComment();
