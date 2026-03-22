@@ -4,9 +4,6 @@ import com.ourcat.backend.config.UserPrincipal;
 import com.ourcat.backend.models.RescueActivity;
 import com.ourcat.backend.models.RescueTask;
 import com.ourcat.backend.models.User;
-import com.ourcat.backend.repositories.RescueContactRepository;
-import com.ourcat.backend.repositories.RescueGuideRepository;
-import com.ourcat.backend.repositories.RescueArticleRepository;
 import com.ourcat.backend.repositories.UserRepository;
 import com.ourcat.backend.services.RescueService;
 import com.ourcat.backend.services.SquareService;
@@ -19,6 +16,7 @@ import org.springframework.web.bind.annotation.*;
 
 import javax.validation.Valid;
 import javax.validation.constraints.NotBlank;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -35,9 +33,6 @@ public class RescueController {
     private final RescueService rescueService;
     private final SquareService squareService;
     private final UserRepository userRepository;
-    private final RescueGuideRepository rescueGuideRepository;
-    private final RescueContactRepository rescueContactRepository;
-    private final RescueArticleRepository rescueArticleRepository;
 
     @PostMapping("/activities")
     public ResponseEntity<?> createActivity(@AuthenticationPrincipal UserPrincipal principal,
@@ -251,27 +246,12 @@ public class RescueController {
 
     @GetMapping("/guide")
     public ResponseEntity<?> getGuide() {
-        List<Map<String, Object>> list = rescueGuideRepository.findAllByOrderBySortOrderAsc().stream()
-                .map(g -> Map.<String, Object>of(
-                        "id", g.getId(),
-                        "title", g.getTitle(),
-                        "content", g.getContent(),
-                        "sortOrder", g.getSortOrder()))
-                .collect(Collectors.toList());
-        return ResponseEntity.ok(list);
+        return ResponseEntity.ok(buildBuiltinGuide());
     }
 
     @GetMapping("/contacts")
     public ResponseEntity<?> getContacts() {
-        List<Map<String, Object>> list = rescueContactRepository.findAllByOrderBySortOrderAsc().stream()
-                .map(c -> Map.<String, Object>of(
-                        "id", c.getId(),
-                        "name", c.getName(),
-                        "phone", c.getPhone(),
-                        "description", c.getDescription() != null ? c.getDescription() : "",
-                        "sortOrder", c.getSortOrder()))
-                .collect(Collectors.toList());
-        return ResponseEntity.ok(list);
+        return ResponseEntity.ok(buildBuiltinContacts());
     }
 
     private Map<String, Object> toMap(RescueActivity a) {
@@ -311,38 +291,111 @@ public class RescueController {
 
     @GetMapping("/articles")
     public ResponseEntity<?> getArticles(@RequestParam(required = false) String category) {
-        List<Map<String, Object>> list;
-        if (category != null && !category.isEmpty()) {
-            list = rescueArticleRepository.findByCategoryOrderBySortOrderAsc(category).stream()
-                    .map(a -> Map.<String, Object>of(
-                            "id", a.getId(),
-                            "title", a.getTitle(),
-                            "content", a.getContent(),
-                            "category", a.getCategory() != null ? a.getCategory() : "",
-                            "sortOrder", a.getSortOrder()))
-                    .collect(Collectors.toList());
-        } else {
-            list = rescueArticleRepository.findAllByOrderBySortOrderAsc().stream()
-                    .map(a -> Map.<String, Object>of(
-                            "id", a.getId(),
-                            "title", a.getTitle(),
-                            "content", a.getContent(),
-                            "category", a.getCategory() != null ? a.getCategory() : "",
-                            "sortOrder", a.getSortOrder()))
-                    .collect(Collectors.toList());
+        List<Map<String, Object>> all = buildBuiltinArticles();
+        if (category == null || category.isBlank()) {
+            return ResponseEntity.ok(all);
         }
-        return ResponseEntity.ok(list);
+        List<Map<String, Object>> filtered = all.stream()
+                .filter(article -> category.equals(String.valueOf(article.get("category"))))
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(filtered);
     }
 
     @GetMapping("/articles/{id}")
     public ResponseEntity<?> getArticle(@PathVariable Long id) {
-        return rescueArticleRepository.findById(id)
-                .map(a -> ResponseEntity.<Object>ok(Map.of(
-                        "id", a.getId(),
-                        "title", a.getTitle(),
-                        "content", a.getContent(),
-                        "category", a.getCategory() != null ? a.getCategory() : "",
-                        "sortOrder", a.getSortOrder())))
+        return buildBuiltinArticles().stream()
+                .filter(article -> id.equals(article.get("id")))
+                .findFirst()
+                .<ResponseEntity<?>>map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
+    }
+
+    private List<Map<String, Object>> buildBuiltinGuide() {
+        List<Map<String, Object>> guides = new ArrayList<>();
+        guides.add(guideItem(
+                1L,
+                "先判断这是社区猫，还是需要立即介入的个体",
+                "先观察是否有耳尖剪标记、项圈、明显外伤或极度消瘦。对健康、警惕的社区猫，先不要立即突然搬离现场；对受伤、被困、呼吸困难或无法站立的猫，尽快联系兽医或救助组织。",
+                1));
+        guides.add(guideItem(
+                2L,
+                "健康成猫以 TNR 为优先策略",
+                "权威指南都把 Trap-Neuter-Return 作为健康社区猫的核心方案：人道抓捕、绝育、疫苗、耳尖剪标、术后原地放回。这样能降低新增猫增长，也能避免把不适合收容的社区猫反复送入容量紧张的收容体系。",
+                2));
+        guides.add(guideItem(
+                3L,
+                "幼猫不要因紧张而立刻抱走",
+                "如果发现的是很小的幼猫，而且没有受伤、体温过低或立即危险，通常需要先在远处观察母猫是否会返回。过早移走健康幼猫，可能反而造成人工喂养和成活风险上升。",
+                3));
+        guides.add(guideItem(
+                4L,
+                "抓捕与术后监测要按标准流程执行",
+                "使用人道诱捕笼，提前预约绝育手术，覆盖笼体减压，并按机构要求禁食。术后要在安静、保暖、封闭的空间监测恢复，确认清醒、呼吸平稳、无异常出血后再放回。",
+                4));
+        guides.add(guideItem(
+                5L,
+                "什么情况要优先找兽医或本地救助",
+                "如果猫咪出现重度脱水、不吃不动、骨折疑似、眼鼻大量分泌物、被车撞或被线网缠绕，不要等观察，应直接进入医疗或紧急救助通道。",
+                5));
+        return guides;
+    }
+
+    private Map<String, Object> guideItem(Long id, String title, String content, int sortOrder) {
+        Map<String, Object> item = new HashMap<>();
+        item.put("id", id);
+        item.put("title", title);
+        item.put("content", content);
+        item.put("sortOrder", sortOrder);
+        return item;
+    }
+
+    private List<Map<String, Object>> buildBuiltinContacts() {
+        List<Map<String, Object>> contacts = new ArrayList<>();
+        contacts.add(contactItem(1L, "校园流浪猫救助组织", "400-xxx-xxxx", "平台默认救助组织热线（示例，请替换为实际电话）", 1));
+        contacts.add(contactItem(2L, "紧急联系", "110", "遇紧急情况可报警", 2));
+        return contacts;
+    }
+
+    private Map<String, Object> contactItem(Long id, String name, String phone, String description, int sortOrder) {
+        Map<String, Object> item = new HashMap<>();
+        item.put("id", id);
+        item.put("name", name);
+        item.put("phone", phone);
+        item.put("description", description);
+        item.put("sortOrder", sortOrder);
+        return item;
+    }
+
+    private List<Map<String, Object>> buildBuiltinArticles() {
+        List<Map<String, Object>> articles = new ArrayList<>();
+        articles.add(articleItem(
+                1L,
+                "发现伤病猫时怎么办",
+                "1. 不要贸然靠近，避免惊吓。\n2. 观察情况，记录位置与外貌。\n3. 在本平台发起救助活动或到广场发布救助需求。\n4. 联系校园救助组织或下方救助电话。",
+                "通用",
+                1));
+        articles.add(articleItem(
+                2L,
+                "联系谁",
+                "可拨打下方「救助电话」中的校园救助组织电话，或在本平台申请加入组织后参与救助任务。",
+                "通用",
+                2));
+        articles.add(articleItem(
+                3L,
+                "注意事项",
+                "• 注意自身安全，避免被咬伤抓伤。\n• 如需送医，可在地图页查看附近宠物医院。\n• 完成救助后请在任务中填写完成汇报，便于记录。",
+                "通用",
+                3));
+        return articles;
+    }
+
+    private Map<String, Object> articleItem(Long id, String title, String content, String category, int sortOrder) {
+        Map<String, Object> item = new HashMap<>();
+        item.put("id", id);
+        item.put("title", title);
+        item.put("content", content);
+        item.put("category", category);
+        item.put("sortOrder", sortOrder);
+        return item;
     }
 }
