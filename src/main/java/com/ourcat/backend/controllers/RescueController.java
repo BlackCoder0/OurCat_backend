@@ -351,18 +351,27 @@ public class RescueController {
 
     private List<Map<String, Object>> buildBuiltinContacts() {
         List<Map<String, Object>> contacts = new ArrayList<>();
-        contacts.add(contactItem(1L, "校园流浪猫救助组织", "400-xxx-xxxx", "平台默认救助组织热线（示例，请替换为实际电话）", 1));
-        contacts.add(contactItem(2L, "紧急联系", "110", "遇紧急情况可报警", 2));
+        contacts.add(contactItem(
+                1L,
+                "喵汪的希望小屋",
+                "",
+                "五邑大学校内流浪猫救助团体，点击前往。",
+                1,
+                "url",
+                "https://www.douyin.com/user/MS4wLjABAAAAKhZ0o8iwfxeekcp-Vue94V4623WyF1w3X4N5PHZ7P6E"));
         return contacts;
     }
 
-    private Map<String, Object> contactItem(Long id, String name, String phone, String description, int sortOrder) {
+    private Map<String, Object> contactItem(Long id, String name, String phone, String description, int sortOrder,
+            String actionType, String actionValue) {
         Map<String, Object> item = new HashMap<>();
         item.put("id", id);
         item.put("name", name);
         item.put("phone", phone);
         item.put("description", description);
         item.put("sortOrder", sortOrder);
+        item.put("actionType", actionType);
+        item.put("actionValue", actionValue);
         return item;
     }
 
