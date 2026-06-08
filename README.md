@@ -13,7 +13,24 @@
 # 🐱 OurCat Backend
 
 > **让每一只校园猫咪都被看见。**  
-> Spring Boot 2.7 + MySQL 8.0 + Flyway 构建的校园流浪猫救助平台后端。为 Android 客户端提供 60+ REST API，涵盖猫咪档案、救助调度、AI 以图搜猫、天气预警等 11 个业务模块。
+> Spring Boot 2.7 + MySQL 8.0 + Flyway 构建的校园流浪猫救助平台后端，为 Android 客户端提供覆盖猫咪档案、救助调度、AI 以图搜猫、天气预警等核心业务模块的 REST API。
+
+---
+
+## ⚡ 30 秒快速启动
+
+```bash
+git clone https://github.com/BlackCoder0/OurCat_backend.git
+cd OurCat_backend
+mvn spring-boot:run -Dspring-boot.run.profiles=dev
+```
+
+```bash
+# 验证（无需登录）
+curl http://localhost:8080/api/auth/captcha
+```
+
+> 💡 开发模式使用 H2 内存数据库，**无需安装 MySQL**，无需配置任何密钥。完整教程见下方[快速上手](#-快速上手)。
 
 ---
 
@@ -80,7 +97,7 @@
 │    (OurCat Android)      │
 └────────────┬────────────┘
              │
-             │  HTTPS REST API (60+ 接口)
+             │  HTTPS REST API
              ▼
 ┌─────────────────────────────────────────┐
 │          Spring Boot 2.7.18              │
@@ -90,15 +107,15 @@
 │  ├── SecurityConfig     BCrypt 密码哈希  │
 │  └── JwtAuthFilter      JWT 无状态认证   │
 ├─────────────────────────────────────────┤
-│  🌐 Controller Layer (11 个控制器)       │
+│  🌐 Controller Layer（认证·猫咪·救助·论坛·广场·消息·组织·天气·AI·文件）│
 │  Auth / User / Cat / Rescue / Forum     │
 │  Square / Message / Org / Weather / AI  │
 ├─────────────────────────────────────────┤
-│  🧠 Service Layer (8 个业务服务)         │
+│  🧠 Service Layer（猫咪·救助·论坛·天气·消息·组织·广场·AI）│
 │  CatService(含AI匹配) / RescueService   │
 │  ForumService / WeatherService / ...    │
 ├─────────────────────────────────────────┤
-│  🗄️ Repository Layer (16 个仓储)        │
+│  🗄️ Repository Layer（Spring Data JPA → Hibernate）│
 │  Spring Data JPA → Hibernate            │
 └────────────┬────────────────────────────┘
              │
@@ -124,7 +141,7 @@ backend/
     ├── java/com/ourcat/backend/
     │   ├── OurCatApplication.java   # 🚀 Spring Boot 启动入口
     │   ├── config/                  # ⚙️ Security, JWT, OSS, Captcha 配置
-    │   ├── controllers/             # 🌐 11 个 REST 控制器
+    │   ├── controllers/             # 🌐 REST 控制器（认证/猫咪/救助/论坛/广场/消息/组织/天气/AI/文件）
     │   │   ├── AuthController       # 登录/注册/验证码
     │   │   ├── UserController       # 用户信息/密码修改
     │   │   ├── CatController        # 猫咪上报/AI匹配/文字归档
@@ -136,9 +153,9 @@ backend/
     │   │   ├── WeatherController    # 天气/预警/温差检测
     │   │   ├── OssController        # OSS 预签名上传
     │   │   └── AiController         # AI 特征提取/相似匹配
-    │   ├── models/                  # 📦 17 个 JPA 实体
-    │   ├── repositories/            # 🗄️ 16 个 Spring Data 仓储
-    │   ├── services/                # 🧠 8 个业务服务
+    │   ├── models/                  # 📦 16 个 JPA 实体
+    │   ├── repositories/            # 🗄️ 15 个 Spring Data 仓储
+    │   ├── services/                # 🧠 业务服务（猫咪/救助/论坛/天气/消息/组织/广场/AI）
     │   │   ├── CatService           # 猫咪业务 + AI 匹配逻辑
     │   │   ├── RescueService        # 救助任务状态机
     │   │   ├── WeatherService       # 天气获取 + 预警判断
@@ -238,6 +255,14 @@ FLUSH PRIVILEGES;
 
 项目采用 **零硬编码** 策略——`application.yml` 中全是 `${VAR:}` 占位符，真实密钥全部通过环境变量注入。
 
+| 变量组 | 开发模式 | 生产模式 | 说明 |
+| :--- | :--- | :--- | :--- |
+| DB | 不需要 | **必需** | dev 自动使用 H2 内存库 |
+| JWT | 不需要 | **必需** | dev 使用默认密钥 |
+| OSS | 不需要 | **视功能而定** | 仅图片上传需要 |
+| AI | 不需要 | 可选 | 不影响基础业务 |
+| Weather | 不需要 | 可选 | 不影响基础业务 |
+
 **最小必填变量**（少了任何一个服务都无法正常启动）：
 
 ```bash
@@ -265,8 +290,9 @@ export AMAP_KEY=你的高德Web API Key
 **可选变量**（AI 功能，不启用不影响基础业务）：
 
 ```bash
-export AI_REPLICATE_API_TOKEN=你的Replicate Token    # 云端 AI 方案
-export AI_HF_TOKEN=你的HuggingFace Token             # 自托管 AI 方案
+export AI_REPLICATE_API_TOKEN=你的Replicate Token    # 方案一：云端 AI（Replicate CLIP）
+export AI_HF_TOKEN=你的HuggingFace Token             # 方案二：HuggingFace 推理 API（DINOv2）
+export AI_EMBEDDING_API_URL=                        # 方案二备选：自托管 embedding 服务地址
 ```
 
 > 💡 **永久保存环境变量**：Linux 写入 `/etc/environment` 或 `~/.bashrc`；Windows 在"系统属性 → 环境变量"中设置。
@@ -345,15 +371,19 @@ curl http://localhost:8080/api/auth/captcha
 
 ## 🔌 API 速查
 
+> **Base URL:** `http://localhost:8080`  
+> **鉴权方式:** `Authorization: Bearer <token>`（仅 `/api/auth/register`、`/api/auth/login`、`/api/auth/captcha` 免登录）  
+> 移动端主要依赖以下接口分组进行联调。
+
 | 路径前缀 | 模块 | 关键操作 |
 | :--- | :--- | :--- |
 | `/api/auth/**` | 🔐 认证 | 登录、注册、图形验证码 |
 | `/api/user/**` | 👤 用户 | 个人信息、修改密码、用户搜索 |
-| `/api/cats/**` | 🐈 猫咪 | 上报、查询、**AI 匹配**、档案归档 |
+| `/api/cat` | 🐈 猫咪 | 上报、查询、**AI 匹配**、档案归档 |
 | `/api/rescue/**` | 🚑 救助 | 活动、**任务分配**、日志、进度 |
 | `/api/forum/**` | 💬 论坛 | 帖子、评论、点赞 |
 | `/api/square/**` | 📢 广场 | 广播、组织活动 |
-| `/api/messages/**` | ✉️ 消息 | 通知、私信、**天气预警推送** |
+| `/api/message` | ✉️ 消息 | 通知、私信、**天气预警推送** |
 | `/api/org/**` | 🏛️ 组织 | 创建、加入、成员管理 |
 | `/api/weather/**` | 🌤️ 天气 | 实时、预报、**温差/降水预警** |
 | `/api/ai/**` | 🧠 AI | **图像特征提取、相似度匹配** |
@@ -422,7 +452,7 @@ Organization ──┬── OrganizationMember  ← 组织有哪些成员
 | 数据库 | MySQL 8.0 + Flyway 7.15 |
 | 对象存储 | 阿里云 OSS 3.17.4 |
 | 天气 | 和风天气 JWT + Open-Meteo CMA GRAPES |
-| AI | Replicate / HuggingFace DINOv2 Embedding (768维) |
+| AI | 默认关闭。开启后可选：① HuggingFace DINOv2 自托管（768维，需 GPU）② Replicate CLIP 云端 API（按量计费，不占本机资源）。不同模型的 embedding 不可混用比对。 |
 | 地图 | 高德地图 Web API |
 | 构建 | Maven |
 
@@ -436,6 +466,17 @@ Organization ──┬── OrganizationMember  ← 组织有哪些成员
 
 ---
 
+## 📌 当前状态
+
+- **当前客户端**：仅 Android（无 iOS / Web 版本）
+- **API 文档**：暂未集成 Swagger / OpenAPI，接口列表见上方 [API 速查](#-api-速查)
+- **开发环境**：默认 H2 内存数据库，开箱即用
+- **生产环境**：MySQL 8.0 + Flyway 自动迁移
+- **已验证环境**：JDK 11 + Maven 3.8 + MySQL 8.0
+- **Last reviewed**：2026-06-08
+
+---
+
 ## 📄 开源协议
 
 MIT License
@@ -444,12 +485,12 @@ MIT License
 
 ## 🌐 English
 
-**OurCat** is a full-stack **Spring Boot + Android + MySQL** campus stray cat rescue platform. It provides 60+ REST APIs across 11 modules: cat archiving with **AI-powered image recognition** (DINOv2 embedding + cosine similarity matching), rescue task scheduling with status workflow, forum & community square, Amap-based location visualization, QWeather + Open-Meteo extreme weather alerts, and Alibaba Cloud OSS presigned upload.
+**OurCat** is a full-stack **Spring Boot + Android + MySQL** campus stray cat rescue platform. It provides REST APIs covering cat archiving with **AI-powered image recognition** (DINOv2 / CLIP embedding + cosine similarity matching), rescue task scheduling with status workflow, forum & community square, Amap-based location visualization, QWeather + Open-Meteo extreme weather alerts, and Alibaba Cloud OSS presigned upload.
 
 > 👉 **Backend repo** (this one) · [Android client](https://github.com/BlackCoder0/OurCat_Android)
 
 ---
 
-<p align="center">
+OurCat — 让每一只校园猫都被看见 ❤️
   <sub>OurCat — 让每一只校园猫咪都被看见 ❤️</sub>
 </p>
