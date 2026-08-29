@@ -14,13 +14,32 @@
 
 > **让每一只校园猫都被看见。**
 >
-> Spring Boot 2.7 + MySQL 8.0 + Flyway 构建的校园流浪猫救助平台后端，为 Android 客户端提供覆盖猫咪档案、救助调度、AI 以图搜猫、天气预警等核心业务模块的 REST API。
-
-> **默认运行方式：**本地开发使用 H2 内存数据库；仓库不提供公开云端 Backend 地址。想让 Android 连接云端，需要先自行部署 Backend，再修改客户端的 Base URL。
+> OurCat 是面向校园流浪猫救助场景的 Spring Boot 后端，为 Android 客户端提供猫咪上报、档案管理、地图数据、广场广播、论坛互动、救助协作、消息通知和天气服务等 REST API。
+>
+> **运行提示：**公开仓库不提供现成云端地址。第一次运行建议使用 `dev` Profile 和 H2；图片、AI 和生产数据库按需配置。
 
 ---
 
-## ⚡ 30 秒快速启动
+## 功能概览
+
+| 模块 | 功能 |
+| :--- | :--- |
+| 猫咪上报与档案 | 保存位置、图片和特征；按地理范围、文本特征和图片向量尝试匹配已有档案 |
+| 地图数据 | 提供猫咪位置、热力图和活跃区域推荐数据 |
+| 救助协作 | 创建活动、分配或申领任务、更新状态、记录救助日志 |
+| 社区与消息 | 提供论坛、广场、评论、点赞、系统通知和天气预警记录 |
+| 外部服务 | 使用阿里云 OSS 保存图片，使用 Replicate 提取图片特征，使用 Open-Meteo 和和风天气提供天气数据 |
+
+### 实现说明
+
+- `/api/cat/report` 先保存上报记录，再在同一次服务调用链中执行当前匹配流程；响应只返回报告 ID、坐标和时间，不直接返回匹配详情。
+- `performAsyncMatching()` 虽然带有 `@Async` 注解，但当前由同一个 Service 直接调用，实际不能按真正的后台异步任务对外承诺。
+- 上报详情可通过 `/api/cat/report/{reportId}` 查询；独立的 `/api/ai/detect` 才会直接返回候选猫咪列表。
+- 当前源码的综合阈值为 `0.68`，同时要求图片相似度至少为 `0.62`；缺少图片向量时使用文本阈值 `0.68`。
+
+---
+
+## 快速开始
 
 ```powershell
 git clone https://github.com/BlackCoder0/OurCat_backend.git
@@ -37,65 +56,68 @@ curl.exe http://localhost:8080/api/auth/captcha
 
 返回内容应包含 `key` 和 `image`。
 
-> 💡 这条路径只验证本地基础服务。开发模式使用 H2 内存数据库，**无需安装 MySQL**；OSS、天气和 AI 都可以后续按功能启用。完整教程见下方[快速上手](#-快速上手)。
+> 这条命令只验证本地基础服务。开发模式使用 H2 内存数据库，**无需安装 MySQL**；OSS、天气和 AI 可以之后再配置。
 
 ---
 
-## 📖 项目简介
+## 项目定位
 
 **OurCat（校园猫谱）** 是一个 **Spring Boot + Android + MySQL** 的全栈校园流浪猫救助平台。
 
-想象这个场景：你在校园里遇到一只没见过的猫，打开 App 拍照上传——后端收到照片后，调用 **Replicate 视觉模型** 提取图像特征，和数据库中已有的猫咪档案逐一比对。如果匹配到足够相似的记录，说明这只猫已经在册；如果没匹配到，则为你创建一份新档案。**这就是 "AI 以图搜猫 + 自动归档" 的核心闭环。**
+本仓库是后端 API 服务，负责处理猫咪上报、档案、地图、社区、救助活动、任务、消息和天气等数据。
 
-而救助功能更进一步：任何人都可以发起一次救助活动（"图书馆门口有只猫腿受伤了"），组织成员能认领任务、更新进度、上传救助日志。系统提供**天气查询和预警接口**，App 在启动或用户触发查询时获取天气；当前版本没有后台定时巡检任务。
+AI 识猫使用 Replicate 提取图片特征。AI 不是本地基础启动条件；没有准备好 Replicate 时，将 `AI_ENABLED` 设为 `false`。
 
-> 👉 这是 **后端 API 服务**。Android 客户端请见 [OurCat Android](https://github.com/BlackCoder0/OurCat_Android)
+天气功能包括无需 Key 的 Open-Meteo 查询，以及需要个人 API Host 和 JWT 的和风天气官方灾害预警。当前版本没有后台定时巡检任务。
+
+Android 客户端请见 [OurCat Android](https://github.com/BlackCoder0/OurCat_Android)。
 
 ---
 
-## 🎨 功能全景
+## 主要功能
 
-```
+| 功能 | 说明 |
+| :--- | :--- |
+| 猫咪匹配 | 使用地理范围、颜色/特征/性格文本和图片向量计算匹配结果；综合阈值为 `0.68`，同时使用图片时最低图片相似度为 `0.62` |
+| 救助活动 | 支持活动创建、任务指派、任务申领、任务状态更新和救助日志 |
+| 广场与论坛 | 支持广播、帖子、评论、点赞，以及救助广播与救助活动的关联 |
+| 天气预警 | 通过天气接口查询当前天气和预警；温差、降水提醒由 Open-Meteo 数据计算 |
+| 文件上传 | 通过 `/api/oss/upload-url` 获取预签名地址，由客户端直传阿里云 OSS |
+
+---
+
+## 功能全景
+
+```text
                           ┌──────────────────┐
-                          │    🔐 用户系统     │
-                          │  注册/登录/JWT鉴权  │
-                          │  组织创建/成员管理   │
+                          │ 用户与组织管理     │
+                          │ 注册、登录、权限    │
                           └────────┬─────────┘
-                                   │ 身份认证贯穿所有操作
+                                   │
           ┌────────────────────────┼────────────────────────┐
           │                        │                        │
           ▼                        ▼                        ▼
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   🐈 猫咪档案    │    │   🚑 救助调度    │    │   💬 社群互动    │
+│ 猫咪与地图       │    │ 救助协作         │    │ 社区与消息       │
 │                 │    │                 │    │                 │
-│ 📸 拍照上报     │    │ 📋 创建救助活动  │    │ 📝 论坛发帖评论  │
-│ 🧠 AI 特征提取  │    │ 👥 分配救助任务  │    │ 👍 点赞投票     │
-│ 🔍 以图搜猫匹配 │    │ 📊 进度追踪     │    │ 📢 广场广播      │
-│ 📋 文本特征归档 │    │ 📝 救助日志记录  │    │ 💌 消息通知      │
-│ 🗺️ 地图+热力图  │    │ ⚠️ 天气预警联动  │    │ 🏛️ 组织管理      │
+│ 上报与档案       │    │ 救助活动         │    │ 论坛与广场       │
+│ 文本/图片匹配    │    │ 任务指派与申领   │    │ 帖子、评论、点赞  │
+│ 位置与热力图     │    │ 状态与日志       │    │ 系统通知与预警    │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
           │                        │                        │
           └────────────────────────┼────────────────────────┘
                                    │
                                    ▼
                     ┌─────────────────────────┐
-                    │      ☁️ 外部服务          │
-                    │ 阿里云 OSS / Replicate │
-                    │ Open-Meteo / 和风天气  │
+                    │ 外部服务                 │
+                    │ 阿里云 OSS、Replicate    │
+                    │ Open-Meteo、和风天气     │
                     └─────────────────────────┘
 ```
 
-### 🔥 三大热点功能详解
-
-| 热点 | 怎么用 | 后端做了什么 |
-| :--- | :--- | :--- |
-| 📸 **AI 以图搜猫 + 自动归档** | 用户拍照上传猫咪照片，填写毛色、性别等特征标签 | ① 图片存 OSS → ② Replicate 模型提取 Embedding 特征 → ③ 上报接口先返回报告 ID → ④ 后台异步执行地理、文本和图片匹配 → ⑤ 通过报告详情接口查看最终关联结果；独立 `/api/ai/detect` 接口才返回 Top-5 候选 |
-| 🚑 **救助活动全流程联动** | 用户发起救助 → 组织成员认领任务 → 执行中更新进度 → 完成归档 | ① 创建 RescueActivity + 子 RescueTask → ② 任务状态机流转（待认领→进行中→已完成）→ ③ 每次状态变更写入 RescueTaskLog → ④ 救助完成自动更新猫咪健康状态；天气预警由独立天气接口查询并写入消息 |
-| 🌤️ **天气预警 × 猫咪守护** | App 启动或用户触发天气查询 | ① 调用和风天气和 Open-Meteo CMA GRAPES 获取预报 → ② 检测日际温差≥8℃ 或降水≥30mm → ③ 有预警时写入当前用户消息；当前版本不包含后台定时巡检 |
-
 ---
 
-## 🏗️ 系统架构
+## 系统架构
 
 ```
 ┌─────────────────────────┐
@@ -136,7 +158,7 @@ curl.exe http://localhost:8080/api/auth/captcha
 
 ---
 
-## 📁 目录结构
+## 目录结构
 
 ```text
 backend/
@@ -145,9 +167,9 @@ backend/
 │
 └── src/main/
     ├── java/com/ourcat/backend/
-    │   ├── OurCatApplication.java   # 🚀 Spring Boot 启动入口
-    │   ├── config/                  # ⚙️ Security, JWT, OSS, Captcha 配置
-    │   ├── controllers/             # 🌐 REST 控制器（认证/猫咪/救助/论坛/广场/消息/组织/天气/AI/文件）
+    │   ├── OurCatApplication.java   # Spring Boot 启动入口
+    │   ├── config/                  # Security、JWT、OSS、验证码配置
+    │   ├── controllers/             # REST 控制器（认证/猫咪/救助/论坛/广场/消息/组织/天气/AI/文件）
     │   │   ├── AuthController       # 登录/注册/验证码
     │   │   ├── UserController       # 用户信息/密码修改
     │   │   ├── CatController        # 猫咪上报/AI匹配/文本特征归档
@@ -159,9 +181,9 @@ backend/
     │   │   ├── WeatherController    # 天气/预警/温差检测
     │   │   ├── OssController        # OSS 预签名上传
     │   │   └── AiController         # AI 特征提取/相似匹配
-    │   ├── models/                  # 📦 16 个 JPA 实体
-    │   ├── repositories/            # 🗄️ 15 个 Spring Data 仓储
-    │   ├── services/                # 🧠 业务服务（猫咪/救助/论坛/天气/消息/组织/广场/AI）
+    │   ├── models/                  # 16 个 JPA 实体
+    │   ├── repositories/            # 15 个 Spring Data 仓储
+    │   ├── services/                # 业务服务（猫咪/救助/论坛/天气/消息/组织/广场/AI）
     │   │   ├── CatService           # 猫咪业务 + AI 匹配逻辑
     │   │   ├── RescueService        # 救助任务状态机
     │   │   ├── WeatherService       # 天气获取 + 预警判断
@@ -172,12 +194,12 @@ backend/
         ├── application.yml          # 主配置（敏感值使用 ${ENV_VAR:} 占位符）
         ├── application-dev.yml      # 开发环境（H2 内存库，开箱即用）
         ├── application-prod.yml     # 生产环境覆盖
-        └── db/migration/            # 🦅 Flyway 迁移（V1 ~ V25，25 个版本）
+        └── db/migration/            # Flyway 迁移（V1 ~ V25，25 个版本）
 ```
 
 ---
 
-## 🚀 快速上手
+## 本地与生产运行
 
 从克隆仓库到服务跑起来，提供两条路径：
 
@@ -188,7 +210,7 @@ backend/
 
 ---
 
-## 🧭 先判断你需要什么
+## 配置顺序
 
 不要一开始就注册所有第三方平台。按下面的顺序配置：
 
@@ -207,9 +229,9 @@ Backend 能启动，不等于所有外部功能都已配置完成。
 
 ---
 
-## ⚙️ 配置文件先讲清楚
+## 配置文件
 
-如果你是第一次接触 Spring Boot，先记住一句话：**不要把个人密钥直接写进公开的 `application.yml`。**
+敏感配置不要写入公开的 `application.yml`。使用环境变量，或使用未提交的外部 `local/application-local.yml`。
 
 ### 这些配置文件分别负责什么？
 
@@ -245,11 +267,11 @@ url: jdbc:mysql://${DB_HOST:localhost}:3306/ourcat
 | 配置内容 | 对应环境变量 | 是否必填 | 缺少时的影响 |
 | :--- | :--- | :--- | :--- |
 | MySQL 地址、账号、密码 | `DB_HOST`、`DB_USERNAME`、`DB_PASSWORD` | 仅 `prod` 或 MySQL 本地运行必填 | Backend 无法连接 MySQL |
-| JWT 签名密钥 | `JWT_SECRET` | 生产必填；仅 `dev` Profile 有开发专用值 | 生产缺少时应启动失败；不要使用开发值 |
+| JWT 签名密钥 | `JWT_SECRET` | 生产必填；仅 `dev` Profile 可暂用默认值 | 当前源码会回退到 `change-me-in-local-profile`，不会自动阻止生产启动；生产必须显式替换 |
 | JWT 有效期 | `JWT_EXPIRATION_MS` | 否，默认 24 小时 | 使用默认有效期 |
 | 阿里云 OSS | `OURCAT_OSS_ENDPOINT`、`OURCAT_OSS_BUCKET`、`OURCAT_OSS_ACCESS_KEY_ID`、`OURCAT_OSS_ACCESS_KEY_SECRET` | 图片功能必填 | 图片、头像、帖子图片无法正常上传 |
 | AI 总开关 | `AI_ENABLED` | 否 | 设置为 `false` 时关闭全部 AI |
-| Replicate AI | `AI_REPLICATE_ENABLED`、`AI_REPLICATE_API_TOKEN`、可选 `AI_REPLICATE_MODEL` | AI 识猫必填 | AI 特征提取和相似匹配不可用 |
+| Replicate AI | `AI_REPLICATE_ENABLED`、`AI_REPLICATE_API_TOKEN` | AI 识猫必填 | AI 特征提取和相似匹配不可用 |
 | 和风天气 | `OURCAT_QWEATHER_API_HOST`、`OURCAT_QWEATHER_JWT` 或 `OURCAT_QWEATHER_JWT_FILE` | 官方灾害预警必填 | 基础天气仍可用，官方灾害预警不可用 |
 | Open-Meteo | `OURCAT_OPEN_METEO_*` | 否，默认无需 Key | 使用默认 Open-Meteo 配置 |
 | 服务端口 | `SERVER_PORT` | 否，默认 `8080` | 使用默认端口 |
@@ -300,7 +322,7 @@ export AI_REPLICATE_API_TOKEN='你的 Replicate Token'
 
 注意：上面的环境变量只对当前终端或当前进程有效。长期运行时，请使用操作系统服务、云服务器控制台或密钥管理工具注入，不要把它们写进 README、源码或部署脚本。
 
-### 第三方服务官方入口与最短配置方法
+### 第三方服务配置入口
 
 只配置你确实要用的服务。不要为了让 Backend 启动而注册全部平台。
 
@@ -397,9 +419,9 @@ ourcat:
 
 不想使用 OSS、Replicate 或和风天气时，不要随便填一个假值。留空或关闭对应功能，并按本文的功能分级逐项启用。
 
-### 你原来的 `更新后端.py` 到底做了什么？
+### 私有部署脚本说明
 
-这个脚本是**私有部署脚本**，不是项目运行所必需的配置工具。它会在打包前：
+`更新后端.py` 是个人使用的部署脚本，不是项目运行所必需的配置工具。它会在打包前：
 
 1. 读取根目录 `local/application-local.yml`；
 2. 临时覆盖 `backend/src/main/resources/application.yml`；
@@ -407,16 +429,16 @@ ourcat:
 4. 在远程服务器停止服务、处理 Flyway 失败记录并重启；
 5. 最后尝试恢复原来的配置文件。
 
-它包含 SSH 登录、远程服务器、数据库和密钥相关信息。**公开仓库不需要它，新用户也不应该照着它配置。** 更重要的是，把真实配置覆盖进 `application.yml` 再打包，会产生两个风险：
+脚本包含 SSH 登录、远程服务器、数据库和密钥相关信息，不应提交到公开仓库。把真实配置覆盖进 `application.yml` 再打包，会产生两个风险：
 
 - 真实密钥可能进入 Git diff、备份文件或构建产物；
 - 生成的 JAR 可能把密钥打进 `BOOT-INF/classes/application.yml`，泄露后不能靠“删掉当前文件”补救。
 
-公开项目的推荐替代方案是：生产环境使用环境变量；个人本地测试使用外部 `local/application-local.yml`。不要复制、改名、上传 `更新后端.py`，也不要把真实 `application-local.yml` 发给别人。
+生产环境使用环境变量；个人本地测试使用外部 `local/application-local.yml`。新用户不需要复制或改名这个脚本。
 
 ---
 
-### 路径 A：开发模式（先跑基础功能）
+### 开发模式
 
 开发模式使用 H2 内存数据库，**不需要安装 MySQL**。没有准备 Replicate 时，请按下面的方式关闭 AI；否则 Backend 仍可能启动，但调用 AI 时会返回配置错误。开发 Profile 使用的 JWT 密钥仅用于本机调试。
 
@@ -465,7 +487,7 @@ H2 控制台：
 
 ---
 
-### 路径 B：生产部署（MySQL + 生产配置）
+### 生产部署
 
 生产部署可放在你自己的本地服务器，也可放在云服务器。两者的 Backend 配置相同；区别主要是网络、防火墙、域名和 HTTPS。
 
@@ -523,7 +545,7 @@ export DB_PASSWORD='你设置的密码'
 export JWT_SECRET='至少32位的随机字符串'
 ```
 
-按需配置 OSS、Replicate 和天气。它们不是生产 Backend 的统一启动条件，但对应功能要正常使用就必须配置。具体变量名和作用见上方[配置文件先讲清楚](#-配置文件先讲清楚)。
+按需配置 OSS、Replicate 和天气。它们不是生产 Backend 的统一启动条件，但对应功能要正常使用就必须配置。具体变量名和作用见上方[配置文件](#配置文件)。
 
 > 💡 环境变量只对当前终端窗口有效。需要长期运行时，请使用系统服务或云服务器的安全环境变量管理方式，不要把密钥提交到 Git。
 >
@@ -539,7 +561,7 @@ mvn clean package
 java -jar target/backend-1.0.0-SNAPSHOT.jar --spring.profiles.active=prod
 ```
 
-首次启动时 **Flyway 自动执行 25 版数据库迁移**，在 `flyway_schema_history` 表中记录版本。之后每次升级只需增加新的迁移脚本，Flyway 会自动检测并执行未应用的版本——**全程无需手动写 SQL 建表**。
+首次启动时 **Flyway 自动执行 25 版数据库迁移**，并在 `flyway_schema_history` 表中记录版本。之后增加新的迁移脚本即可由 Flyway 执行，通常不需要手动写 SQL 建表。
 
 #### 5. 验证部署
 
@@ -564,7 +586,7 @@ curl http://localhost:8080/api/auth/captcha
 
 ---
 
-## 🔌 API 速查
+## API 速查
 
 > **Base URL:** `http://localhost:8080`  
 > **鉴权方式:** `Authorization: Bearer <token>`（仅 `/api/auth/register`、`/api/auth/login`、`/api/auth/captcha` 免登录）  
@@ -613,8 +635,8 @@ curl.exe -X GET "http://localhost:8080/api/cat/locations" `
 | `GET` | `/api/auth/captcha` | 否 | 返回验证码 `key` 和 Base64 图片 |
 | `POST` | `/api/auth/register` | 否 | 注册需要 `username`、`password`、`captchaKey`、`captcha` |
 | `POST` | `/api/auth/login` | 否 | 登录需要用户名、密码和验证码，返回 JWT |
-| `POST` | `/api/cat/report` | 是 | 保存上报后异步匹配，响应先返回报告 ID |
-| `GET` | `/api/cat/report/{reportId}` | 是 | 查询异步匹配后的报告详情 |
+| `POST` | `/api/cat/report` | 是 | 保存上报并执行当前匹配流程，响应返回报告 ID、坐标和时间 |
+| `GET` | `/api/cat/report/{reportId}` | 是 | 查询上报详情、匹配信息和附近猫咪 |
 | `POST` | `/api/ai/detect` | 是 | 根据图片 URL 提取特征并返回候选猫咪 |
 | `GET` | `/api/oss/upload-url?filename=cat.jpg&contentType=image/jpeg` | 是 | 获取 OSS 预签名上传地址；OSS 未配置时图片功能不可用 |
 | `GET` | `/api/weather/warning` | 是 | 按 `location=纬度,经度` 查询天气预警并写入消息 |
@@ -623,7 +645,7 @@ OSS 上传步骤：先调用上面的接口，再使用返回的 `uploadUrl` 发
 
 ---
 
-## 🗄️ 数据关系
+## 数据关系
 
 ```
 User ──┬── CatReport (上报者)        ← 谁上报了这只猫
@@ -663,7 +685,7 @@ SquarePost ─────── RescueActivity     ← 广场救助帖关联的
 
 ---
 
-## 🔒 安全设计
+## 安全设计
 
 * **凭据不入源码**：生产密钥通过环境变量或未提交的私有配置注入，公开源码不包含真实凭证。
 * **密码 BCrypt 哈希**：用户密码使用 Spring Security BCryptPasswordEncoder 加盐存储。
@@ -673,7 +695,7 @@ SquarePost ─────── RescueActivity     ← 广场救助帖关联的
 
 ---
 
-## 🛠️ 技术栈
+## 技术栈
 
 | 层面 | 选型 |
 | :--- | :--- |
@@ -689,18 +711,16 @@ SquarePost ─────── RescueActivity     ← 广场救助帖关联的
 
 ---
 
-## 🤝 贡献与鸣谢
-
-如果你觉得这个项目对校园流浪猫救助有意义，欢迎点一个 **⭐ Star**！
+## 反馈
 
 如有问题或建议，欢迎提交 Issue。
 
 ---
 
-## 📌 当前状态
+## 当前状态
 
 - **当前客户端**：仅 Android（无 iOS / Web 版本）
-- **API 文档**：暂未集成 Swagger / OpenAPI，接口列表见上方 [API 速查](#-api-速查)
+- **API 文档**：暂未集成 Swagger / OpenAPI，接口列表见上方 [API 速查](#api-速查)
 - **开发环境**：默认 H2 内存数据库，开箱即用
 - **生产环境**：MySQL 8.0 + Flyway 自动迁移
 - **已验证环境**：JDK 11 + Maven 3.8，H2 开发模式可编译测试
@@ -709,20 +729,16 @@ SquarePost ─────── RescueActivity     ← 广场救助帖关联的
 
 ---
 
-## 📄 开源协议
+## 开源协议
 
 MIT License
 
 ---
 
-## 🌐 English
+## English
 
 **OurCat** is a full-stack **Spring Boot + Android + MySQL** campus stray cat rescue platform. It provides REST APIs covering cat archiving with **Replicate-powered image recognition** (embedding + cosine similarity matching), rescue task scheduling with status workflow, forum & community square, weather queries and warnings, and Alibaba Cloud OSS presigned upload.
 
 > 👉 **Backend repo** (this one) · [Android client](https://github.com/BlackCoder0/OurCat_Android)
 
 ---
-
-OurCat — 让每一只校园猫都被看见 ❤️
-  <sub>OurCat — 让每一只校园猫都被看见 ❤️</sub>
-</p>
