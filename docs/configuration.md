@@ -42,7 +42,7 @@ application-dev.yml   （启动 dev 时加载）
 或 application-local.yml（启动 local 时加载）
 ```
 
-`application.yml` 中的环境变量占位符通常写在真正的配置值内部，例如：
+`application.yml` 中的环境变量占位符写在配置值中，例如：
 
 ```yaml
 url: jdbc:mysql://${DB_HOST:localhost}:3306/ourcat
@@ -127,7 +127,7 @@ OSS 还有一个容易被忽略的限制：当前后端把上传结果保存为 
 
 ### 私有方式：外部 `local/application-local.yml`
 
-你原来的目录结构可以保留，但要理解它的加载方式：
+外部配置目录示例：
 
 ```text
 OurCat/
@@ -166,9 +166,9 @@ java -jar target/backend-1.0.0-SNAPSHOT.jar `
   --spring.config.additional-location=optional:file:../local/
 ```
 
-文件名必须是 `application-local.yml`，目录必须是从 `backend/` 看过去的 `../local/`。只创建文件、不激活 Profile，等于没配置，Spring Boot 不会替你猜。
+文件名使用 `application-local.yml`，目录相对 `backend/` 为 `../local/`。加载该配置需要同时指定外部目录并启用 `local` Profile。
 
-可以复制下面的**无密钥模板**，再在本机填写真实值。这个文件只能留在你自己的电脑或服务器上：
+以下模板中的凭据需要在本地填写，配置文件不提交到仓库：
 
 ```yaml
 server:

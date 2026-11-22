@@ -1,0 +1,67 @@
+meta:
+  profile: engineering-review
+  theme: tech-blue
+  layout: hierarchical
+  routing: orthogonal
+  canvas: auto
+  title: OurCat 系统结构
+  description: Android 客户端、Spring Boot 后端、数据存储与按需配置的外部服务。
+  legend: 实线表示客户端请求；虚线表示数据访问；点线表示按需启用的外部服务。
+nodes:
+  - id: app
+    label: "Android 客户端\nJava · Fragment · Retrofit"
+    type: service
+    size: xl
+    position: { x: 352, y: 32 }
+    style: { fontSize: 16 }
+  - id: amap
+    label: "高德 Android SDK\n地图 · 定位 · 地址查询\n需自有 Key"
+    type: service
+    size: xl
+    position: { x: 672, y: 32 }
+    style: { fontSize: 16 }
+  - id: backend
+    label: "Spring Boot 后端\nJWT 认证 · 业务服务\nJPA 数据访问"
+    type: service
+    size: xl
+    position: { x: 352, y: 240 }
+    style: { fontSize: 16 }
+  - id: data
+    label: "业务数据\nMySQL + Flyway（prod）\nH2 文件库（demo）"
+    type: database
+    size: xl
+    position: { x: 32, y: 448 }
+    style: { fontSize: 16 }
+  - id: images
+    label: "图片存储\nOSS（云端）\n本地文件（demo）"
+    type: database
+    size: xl
+    position: { x: 352, y: 448 }
+    style: { fontSize: 16 }
+  - id: external
+    label: "图片特征与天气\nReplicate / Open-Meteo\n和风天气（按配置启用）"
+    type: service
+    size: xl
+    position: { x: 672, y: 448 }
+    style: { fontSize: 16 }
+edges:
+  - from: app
+    to: backend
+    type: primary
+    style: { exitX: 0.5, exitY: 1, entryX: 0.5, entryY: 0 }
+  - from: app
+    to: amap
+    type: optional
+    style: { exitX: 1, exitY: 0.5, entryX: 0, entryY: 0.5 }
+  - from: backend
+    to: data
+    type: data
+    style: { exitX: 0, exitY: 0.5, entryX: 0.5, entryY: 0 }
+  - from: backend
+    to: images
+    type: data
+    style: { exitX: 0.5, exitY: 1, entryX: 0.5, entryY: 0 }
+  - from: backend
+    to: external
+    type: optional
+    style: { exitX: 1, exitY: 0.5, entryX: 0.5, entryY: 0 }

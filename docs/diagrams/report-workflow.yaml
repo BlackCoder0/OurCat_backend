@@ -1,0 +1,76 @@
+meta:
+  profile: engineering-review
+  theme: tech-blue
+  layout: hierarchical
+  routing: orthogonal
+  canvas: auto
+  title: 猫咪上报与档案匹配
+  description: 上报先保存，再根据候选范围和可用特征进行关联或创建，之后可以查询和整理档案。
+nodes:
+  - id: input
+    label: "拍照或选图\n填写位置与描述"
+    type: service
+    size: xl
+    position: { x: 32, y: 32 }
+    style: { fontSize: 16 }
+  - id: save
+    label: "上传图片并保存上报\nCatReport"
+    type: service
+    size: xl
+    position: { x: 352, y: 32 }
+    style: { fontSize: 16 }
+  - id: match
+    label: "筛选 15 km 内候选\n比较文字 / 图片特征"
+    type: service
+    size: xl
+    position: { x: 672, y: 32 }
+    style: { fontSize: 16 }
+  - id: decision
+    label: "找到达标\n候选？"
+    type: decision
+    size: xl
+    position: { x: 672, y: 240 }
+    style: { fontSize: 16 }
+  - id: known
+    label: "关联已有猫咪档案\n保留本次目击记录"
+    type: service
+    size: xl
+    position: { x: 352, y: 240 }
+    style: { fontSize: 16 }
+  - id: created
+    label: "创建新的猫咪档案\n关联本次上报"
+    type: service
+    size: xl
+    position: { x: 672, y: 448 }
+    style: { fontSize: 16 }
+  - id: result
+    label: "查询结果与整理档案\n确认关联 / 合并档案"
+    type: service
+    size: xl
+    position: { x: 352, y: 448 }
+    style: { fontSize: 16 }
+edges:
+  - { from: input, to: save, type: primary }
+  - { from: save, to: match, type: primary }
+  - from: match
+    to: decision
+    type: primary
+    style: { exitX: 0.5, exitY: 1, entryX: 0.5, entryY: 0 }
+  - from: decision
+    to: known
+    type: primary
+    label: 是
+    style: { exitX: 0, exitY: 0.5, entryX: 1, entryY: 0.5 }
+  - from: decision
+    to: created
+    type: primary
+    label: 否
+    style: { exitX: 0.5, exitY: 1, entryX: 0.5, entryY: 0 }
+  - from: known
+    to: result
+    type: primary
+    style: { exitX: 0.5, exitY: 1, entryX: 0.5, entryY: 0 }
+  - from: created
+    to: result
+    type: primary
+    style: { exitX: 0, exitY: 0.5, entryX: 1, entryY: 0.5 }
