@@ -2,9 +2,13 @@
 
 # OurCat Backend · 校园猫谱后端
 
-OurCat 是面向校园流浪猫记录与救助场景的全栈毕业设计，采用 **Android + Spring Boot + MySQL**。项目把猫咪目击记录、档案匹配、地图展示、救助任务和社区交流放在同一套业务中：发现猫咪后可以上报，遇到受伤或受困情况可以发起救助，并继续记录处理过程。
+OurCat 是采用 **Android + Spring Boot + MySQL** 实现的校园流浪猫综合救助平台，也是一个可从源码研究的全栈毕业设计。主要功能包括猫咪上报与建档、地图查看、求助广播、志愿者任务和社区讨论。
 
-本仓库提供 REST API、业务服务和数据库迁移；客户端见 [OurCat Android](https://github.com/BlackCoder0/OurCat_Android)。源码用于毕业设计研究和开发交流，运行时使用各自的服务与数据，不提供公共在线社区。
+项目针对三个具体问题展开：同一只猫的照片和位置散落在不同记录里，文字描述难以找到现场，发出求助后缺少后续处理记录。因此，系统以猫咪档案保存长期信息，以目击上报记录每次发现，再用救助活动、任务和日志记录分工与结果。
+
+本仓库提供 REST API、业务服务和数据库迁移；客户端位于 [OurCat Android](https://github.com/BlackCoder0/OurCat_Android)。公开版本需要运行各自的后端，账号和内容保存在对应实例中。
+
+**[下载 Windows 体验包与 APK](https://github.com/BlackCoder0/OurCat_backend/releases/tag/v0.1.0-local-preview.1)** · [第一次运行](docs/local-experience.md) · [API 文档](docs/api.md)
 
 [运行体验](#运行体验) · [功能与场景](#功能与场景) · [技术栈](#技术栈) · [系统结构](#系统结构) · [核心流程](#核心流程) · [设计亮点](#设计亮点) · [源码与文档](#源码与文档)
 
@@ -92,13 +96,24 @@ mvn spring-boot:run '-Dspring-boot.run.profiles=demo'
 3. 候选达到阈值后关联已有 `Cat`，否则创建新档案。上报记录与猫咪档案分别保存，可以保留同一只猫的多次目击。
 4. 客户端查询上报详情和匹配结果；另有确认和档案合并操作，用于后续整理重复或不准确的关联。
 
-匹配规则位于 [CatService](src/main/java/com/ourcat/backend/services/CatService.java)。缺少图片向量时使用文字匹配，结果仍需核对。阈值、调用方式和当前实现限制见[架构说明](docs/architecture.md)。
+匹配由 [CatService](src/main/java/com/ourcat/backend/services/CatService.java) 和 [AiService](src/main/java/com/ourcat/backend/services/AiService.java) 实现：
+
+- **地理筛选**：以本次上报为中心，筛选 15 km 内的历史记录。
+- **文字比较**：将毛色、特征、性格拆为关键词集合，分别计算 Jaccard 相似度，权重为 0.5、0.3、0.2。
+- **图片比较**：通过外部服务提取特征向量，再计算归一化余弦相似度；Replicate 的默认配置使用 CLIP embeddings。
+- **关联判定**：两种得分均可用时，文字与图片各占 50%；默认综合分至少 0.68，且图片分至少 0.62。缺少图片向量时只比较文字，默认阈值为 0.68。
+
+这些数值是当前代码的默认规则，识别结果可以后续核对和整理；项目尚未提供识别准确率评测。[架构说明](docs/architecture.md#匹配规则)列出公式、配置入口和当前调用方式。
 
 ### 一次救助怎样分工和完成
 
-救助活动可以由猫咪档案或广场救助广播发起。普通用户申请加入组织后，由管理员审核；组织成员可申领任务，具备管理权限的用户也可分配任务。执行者在任务中补充日志和完成说明。
+![广场与救助双向创建、任务日志和结果通知](docs/images/rescue-workflow.png)
 
-活动、任务和广播分别保存状态。广场广播标记为已解决时，会联动关联活动和任务，并给相关用户发送消息；单个任务完成与整个活动完结是不同操作。相关实现见 [RescueService](src/main/java/com/ourcat/backend/services/RescueService.java) 和 [SquareService](src/main/java/com/ourcat/backend/services/SquareService.java)。
+救助有两个入口：发布救助类广场广播时，后端会尝试创建关联活动；从地图或猫咪档案发起救助活动时，也会尝试生成公开广播。成功创建后，两者通过关联 ID 对应同一件事。
+
+组织成员可以申领任务，活动创建者或有管理权限的用户可以向组织成员分配任务。执行者补充日志和完成说明。活动、任务、日志分别保存“发生了什么”“由谁处理”和“处理过什么”，广场详情和活动详情再把这些记录组织成时间线。
+
+广场广播标记为已解决时，会同步关联活动、相关任务和站内消息。单个任务完成与整个活动完结是不同操作。实现见 [RescueService](src/main/java/com/ourcat/backend/services/RescueService.java) 和 [SquareService](src/main/java/com/ourcat/backend/services/SquareService.java)。
 
 ## 设计亮点
 
@@ -106,7 +121,8 @@ mvn spring-boot:run '-Dspring-boot.run.profiles=demo'
 | --- | --- |
 | 档案与目击记录分开 | 档案保存猫咪信息，上报保存时间、位置和照片，便于按同一档案积累多次观察记录 |
 | 地理、文字与图片共同参与匹配 | 先缩小候选范围，再比较特征；外部图片服务不可用时，已有文字匹配流程仍可运行 |
-| 广播、活动、任务和消息关联 | 现场求助可以继续进入分工和进度记录，解决结果也能同步给相关人员 |
+| 广场与救助双向创建 | 广播可以发起救助，活动也可以生成广播，使同一事件的公开信息与处理记录相互对应 |
+| 活动、任务、日志分层 | 一个活动容纳多个执行任务，日志记录过程；时间线与站内消息便于查看后续结果 |
 | 位置统计可视化 | 同一批上报数据同时用于点位、热力图和活跃区域推荐，便于从记录过渡到巡查参考 |
 | 统一上传约定 | 客户端先申请上传地址，再 PUT 文件；本地和 OSS 使用相同返回字段，业务提交只保存图片地址 |
 | 云端与本地采用同一套业务 | 通过 Spring Profile 更换数据库、图片存储和第三方服务配置，便于源码学习与本地试用 |
