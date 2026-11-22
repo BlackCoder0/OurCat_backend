@@ -61,7 +61,7 @@ curl.exe http://localhost:8080/api/auth/captcha
 
 ## 本地体验模式
 
-`demo` Profile 使用独立的 H2 文件数据库，预置本地示例猫咪、帖子、救助活动和默认组织；重启后会保留数据。图片上传尚未接入本地存储，此模式不配置 OSS、AI 或生产数据库。
+`demo` Profile 使用独立的 H2 文件数据库和本地图片目录，预置本地示例猫咪、帖子、救助活动和默认组织；重启后会保留数据。图片通过同一个 `/api/oss/upload-url` 协议保存到 `data/demo/images`，单张图片限制为 10 MB；此模式不配置 OSS、AI 或生产数据库。
 
 在 Backend 仓库根目录启动：
 
@@ -80,7 +80,7 @@ mvn spring-boot:run "-Dspring-boot.run.profiles=demo"
 
 `demo` Profile 仅允许使用本地 H2 文件数据库，且要求 AI、OSS 和和风天气凭据留空，并且不能与 `dev` 或 `prod` 同时启用。基础天气接口仍可能访问 Open-Meteo；不配置个人天气凭据不会产生和风天气调用。模拟器 Debug APK 默认使用 `http://10.0.2.2:8080/`；实体手机需要在 Android 的 `local.properties` 中配置电脑局域网地址并重新构建。Release APK 仍要求 HTTPS。
 
-此模式用于本地开发和源码学习，尚未提供打包体验器；本地图片上传、实体手机连接和所有救助角色流程仍需进一步配置和验证。
+此模式用于本地开发和源码学习，尚未提供打包体验器；实体手机连接和所有救助角色流程仍需进一步配置和验证。
 
 ---
 
@@ -106,7 +106,7 @@ Android 客户端请见 [OurCat Android](https://github.com/BlackCoder0/OurCat_A
 | 救助活动 | 支持活动创建、任务指派、任务申领、任务状态更新和救助日志 |
 | 广场与论坛 | 支持广播、帖子、评论、点赞，以及救助广播与救助活动的关联 |
 | 天气预警 | 通过天气接口查询当前天气和预警；温差、降水提醒由 Open-Meteo 数据计算 |
-| 文件上传 | 通过 `/api/oss/upload-url` 获取预签名地址，由客户端直传阿里云 OSS |
+| 文件上传 | 生产/云端通过 `/api/oss/upload-url` 直传阿里云 OSS；`demo` 使用同一接口保存到本地图片目录 |
 
 ---
 
@@ -203,7 +203,8 @@ backend/
     │   │   ├── MessageController    # 消息/通知
     │   │   ├── OrganizationController # 组织管理
     │   │   ├── WeatherController    # 天气/预警/温差检测
-    │   │   ├── OssController        # OSS 预签名上传
+    │   │   ├── OssController        # OSS 或 demo 本地上传入口
+    │   │   ├── LocalImageController # demo 本地图片读写
     │   │   └── AiController         # AI 特征提取/相似匹配
     │   ├── models/                  # 16 个 JPA 实体
     │   ├── repositories/            # 15 个 Spring Data 仓储
@@ -243,7 +244,7 @@ backend/
 | 先启动 Backend | JDK 11、Maven | 无法构建或启动 |
 | 本地基础业务 | 开发模式自动使用 H2 | 重启会清空数据，但不影响启动 |
 | 生产数据库 | MySQL、数据库账号、生产 JWT 密钥 | 生产模式无法正常使用 |
-| 图片能力 | 阿里云 OSS | 猫咪图片、头像、帖子图片上传不可用 |
+| 图片能力 | `demo` 本地目录；生产/云端阿里云 OSS | `dev` 未配置 OSS 时不可用；`demo` 不需要 OSS |
 | AI 识猫 | Replicate Token 和开关 | AI 特征提取、相似匹配不可用 |
 | 基础天气 | Open-Meteo，默认无需 Key | 基础天气和计算型提醒不可用 |
 | 官方灾害预警 | 和风天气 JWT | 官方灾害预警不可用，基础天气不受影响 |
@@ -661,7 +662,7 @@ curl.exe -X GET "http://localhost:8080/api/cat/locations" `
 | `POST` | `/api/cat/report` | 是 | 保存上报并执行当前匹配流程，响应返回报告 ID、坐标和时间 |
 | `GET` | `/api/cat/report/{reportId}` | 是 | 查询上报详情、匹配信息和附近猫咪 |
 | `POST` | `/api/ai/detect` | 是 | 根据图片 URL 提取特征并返回候选猫咪 |
-| `GET` | `/api/oss/upload-url?filename=cat.jpg&contentType=image/jpeg` | 是 | 获取 OSS 预签名上传地址；OSS 未配置时图片功能不可用 |
+| `GET` | `/api/oss/upload-url?filename=cat.jpg&contentType=image/jpeg` | 是 | 获取上传地址；生产/云端返回 OSS 预签名地址，`demo` 返回本地地址 |
 | `GET` | `/api/weather/warning` | 是 | 按 `location=纬度,经度` 查询天气预警并写入消息 |
 
 OSS 上传步骤：先调用上面的接口，再使用返回的 `uploadUrl` 发起 `PUT`，并携带返回的 `contentType` 请求头；上传成功后，把返回的 `publicUrl` 作为图片地址提交给猫咪、论坛或救助接口。
