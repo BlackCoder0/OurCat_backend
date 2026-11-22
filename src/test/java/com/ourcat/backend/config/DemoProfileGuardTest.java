@@ -47,6 +47,10 @@ class DemoProfileGuardTest {
         MockEnvironment ossEnvironment = safeDemoEnvironment();
         ossEnvironment.setProperty("ourcat.oss.access-key-id", "configured");
         assertThrows(IllegalStateException.class, () -> DemoProfileGuard.validate(ossEnvironment));
+
+        MockEnvironment weatherEnvironment = safeDemoEnvironment();
+        weatherEnvironment.setProperty("ourcat.qweather.jwt", "configured");
+        assertThrows(IllegalStateException.class, () -> DemoProfileGuard.validate(weatherEnvironment));
     }
 
     private MockEnvironment safeDemoEnvironment() {

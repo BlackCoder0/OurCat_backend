@@ -57,7 +57,8 @@ public final class DemoProfileGuard implements ApplicationContextInitializer<Con
         }
         for (String property : new String[] {
                 "ourcat.oss.endpoint", "ourcat.oss.bucket",
-                "ourcat.oss.access-key-id", "ourcat.oss.access-key-secret"
+                "ourcat.oss.access-key-id", "ourcat.oss.access-key-secret",
+                "ourcat.qweather.jwt", "ourcat.qweather.jwt-file"
         }) {
             if (!environment.getProperty(property, "").isBlank()) {
                 throw new IllegalStateException("OSS credentials are not allowed in the demo profile");
