@@ -61,7 +61,7 @@ public final class DemoProfileGuard implements ApplicationContextInitializer<Con
                 "ourcat.qweather.jwt", "ourcat.qweather.jwt-file"
         }) {
             if (!environment.getProperty(property, "").isBlank()) {
-                throw new IllegalStateException("OSS credentials are not allowed in the demo profile");
+                throw new IllegalStateException("External service credentials are not allowed in demo: " + property);
             }
         }
 

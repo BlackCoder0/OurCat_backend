@@ -11,6 +11,8 @@ import javax.servlet.http.HttpServletRequest;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.http.HttpStatus;
 
 @RestController
 @RequestMapping("/api/oss")
@@ -32,7 +34,12 @@ public class OssController {
             @RequestParam(defaultValue = "image/jpeg") String contentType,
             HttpServletRequest request) {
         if (localImageStorage != null) {
-            LocalImageStorage.UploadTicket ticket = localImageStorage.prepare(contentType);
+            LocalImageStorage.UploadTicket ticket;
+            try {
+                ticket = localImageStorage.prepare(contentType);
+            } catch (IllegalArgumentException e) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+            }
             String baseUrl = request.getScheme() + "://" + request.getHeader("Host");
             String path = "/api/oss/local/" + ticket.fileName;
             String uploadUrl = baseUrl + path + "?token="

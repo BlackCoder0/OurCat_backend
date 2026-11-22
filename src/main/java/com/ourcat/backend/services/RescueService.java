@@ -106,7 +106,14 @@ public class RescueService {
 
     @Transactional
     public Optional<RescueActivity> updateStatus(Long id, String status, Long operatorUserId) {
-        return rescueActivityRepository.findById(id).map(activity -> {
+        return rescueActivityRepository.findById(id)
+                .filter(activity -> canManageActivity(activity, operatorUserId)
+                        || rescueTaskRepository.findByRescueActivityIdOrderByAssignedAtAsc(activity.getId()).stream()
+                                .anyMatch(task -> operatorUserId != null && (operatorUserId.equals(task.getAssigneeUserId())
+                                        || operatorUserId.equals(task.getAssignerUserId())))
+                        || (activity.getSquarePostId() != null && squarePostRepository.findById(activity.getSquarePostId())
+                                .map(post -> post.getUserId().equals(operatorUserId)).orElse(false)))
+                .map(activity -> {
             activity.setStatus(status);
             if ("completed".equals(status)) {
                 activity.setCompletedAt(Instant.now());
@@ -366,14 +373,8 @@ public class RescueService {
         if ("completed".equalsIgnoreCase(activity.getStatus())) {
             throw new IllegalArgumentException("活动已完成，无法指派任务");
         }
-        if (!activity.getCreatedBy().equals(assignerUserId)) {
-            boolean isManager = organizationMemberRepository
-                    .findByOrganizationIdAndUserId(activity.getOrganizationId(), assignerUserId)
-                    .map(member -> "manager".equals(member.getRole()))
-                    .orElse(false);
-            if (!isManager) {
-                throw new IllegalArgumentException("仅活动创建者或组织管理员可指派");
-            }
+        if (!canManageActivity(activity, assignerUserId)) {
+            throw new IllegalArgumentException("仅活动创建者或组织管理员可指派");
         }
         if (!organizationMemberRepository.existsByOrganizationIdAndUserId(activity.getOrganizationId(),
                 assigneeUserId)) {
@@ -425,6 +426,14 @@ public class RescueService {
 
     public List<RescueTask> getMyTasks(Long userId) {
         return rescueTaskRepository.findByAssigneeUserIdOrderByAssignedAtDesc(userId);
+    }
+
+    private boolean canManageActivity(RescueActivity activity, Long userId) {
+        if (userId == null) return false;
+        if (userId.equals(activity.getCreatedBy())) return true;
+        if (userRepository.findById(userId).map(user -> user.getRole() >= 3).orElse(false)) return true;
+        return organizationMemberRepository.findByOrganizationIdAndUserId(activity.getOrganizationId(), userId)
+                .map(member -> List.of("admin", "manager").contains(member.getRole())).orElse(false);
     }
 
     @Transactional

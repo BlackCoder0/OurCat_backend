@@ -3,6 +3,12 @@ package com.ourcat.backend.utils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
+import org.springframework.scheduling.annotation.Scheduled;
+
+import javax.imageio.ImageIO;
+import javax.imageio.ImageReader;
+import javax.imageio.stream.ImageInputStream;
+import java.io.ByteArrayInputStream;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -12,7 +18,8 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.time.Instant;
-import java.util.Arrays;
+import java.util.Iterator;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -23,7 +30,7 @@ public class LocalImageStorage {
 
     private static final long MAX_IMAGE_BYTES = 10L * 1024 * 1024;
     private static final long TICKET_TTL_SECONDS = 10 * 60;
-    private static final Map<String, UploadTicket> TICKETS = new ConcurrentHashMap<>();
+    private final Map<String, UploadTicket> tickets = new ConcurrentHashMap<>();
 
     private final Path imageDirectory;
 
@@ -40,25 +47,34 @@ public class LocalImageStorage {
         String normalizedType = normalizeContentType(contentType);
         String fileName = UUID.randomUUID() + extensionFor(normalizedType);
         String token = UUID.randomUUID().toString();
-        TICKETS.put(fileName, new UploadTicket(fileName, token, normalizedType,
-                Instant.now().plusSeconds(TICKET_TTL_SECONDS)));
-        return new UploadTicket(fileName, token, normalizedType, null);
+        cleanup();
+        UploadTicket ticket = new UploadTicket(fileName, token, normalizedType,
+                Instant.now().plusSeconds(TICKET_TTL_SECONDS));
+        tickets.put(fileName, ticket);
+        return ticket;
     }
 
     public void save(String fileName, String token, String contentType, InputStream input) throws IOException {
-        UploadTicket ticket = TICKETS.remove(fileName);
+        UploadTicket ticket = tickets.get(fileName);
         if (ticket == null || ticket.expiresAt.isBefore(Instant.now()) || !ticket.token.equals(token)) {
             throw new IllegalArgumentException("Upload ticket is invalid or expired");
         }
         if (!ticket.contentType.equals(normalizeContentType(contentType))) {
             throw new IllegalArgumentException("Content-Type does not match the upload ticket");
         }
+        if (!tickets.remove(fileName, ticket)) {
+            throw new IllegalArgumentException("Upload ticket has already been used");
+        }
 
         byte[] data = readLimited(input);
-        if (!matchesImageType(ticket.contentType, data)) {
-            throw new IllegalArgumentException("Uploaded content is not a supported image");
-        }
+        validateImage(ticket.contentType, data);
         Files.write(resolve(fileName), data, StandardOpenOption.CREATE_NEW);
+    }
+
+    @Scheduled(fixedRate = 60000)
+    public void cleanup() {
+        Instant now = Instant.now();
+        tickets.entrySet().removeIf(entry -> !entry.getValue().expiresAt.isAfter(now));
     }
 
     public StoredImage read(String fileName) throws IOException {
@@ -95,42 +111,45 @@ public class LocalImageStorage {
         return output.toByteArray();
     }
 
-    private boolean matchesImageType(String contentType, byte[] data) {
-        if ("image/jpeg".equals(contentType)) {
-            return data.length >= 3 && (data[0] & 0xff) == 0xff && (data[1] & 0xff) == 0xd8
-                    && (data[2] & 0xff) == 0xff;
+    private void validateImage(String contentType, byte[] data) {
+        try (ImageInputStream stream = ImageIO.createImageInputStream(new ByteArrayInputStream(data))) {
+            Iterator<ImageReader> readers = ImageIO.getImageReaders(stream);
+            if (!readers.hasNext()) throw new IllegalArgumentException("Invalid image content");
+            ImageReader reader = readers.next();
+            try {
+                reader.setInput(stream);
+                String format = reader.getFormatName().toLowerCase(Locale.ROOT);
+                if (!contentType.equals("image/" + format)
+                        || (long) reader.getWidth(0) * reader.getHeight(0) > 20_000_000
+                        || reader.read(0) == null) {
+                    throw new IllegalArgumentException("Image type mismatch or more than 20 million pixels");
+                }
+            } finally {
+                reader.dispose();
+            }
+        } catch (IOException e) {
+            throw new IllegalArgumentException("Invalid or truncated image content", e);
         }
-        if ("image/png".equals(contentType)) {
-            return data.length >= 8 && Arrays.equals(Arrays.copyOf(data, 8),
-                    new byte[] {(byte) 0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a});
-        }
-        if ("image/gif".equals(contentType)) {
-            return data.length >= 6 && ("GIF87a".equals(new String(data, 0, 6))
-                    || "GIF89a".equals(new String(data, 0, 6)));
-        }
-        return data.length >= 12 && "RIFF".equals(new String(data, 0, 4))
-                && "WEBP".equals(new String(data, 8, 4));
     }
 
     private String normalizeContentType(String contentType) {
         if (contentType == null || contentType.isBlank()) {
             return "image/jpeg";
         }
-        String normalized = contentType.trim().toLowerCase();
+        String normalized = contentType.split(";", 2)[0].trim().toLowerCase(Locale.ROOT);
         if ("image/jpg".equals(normalized)) {
             return "image/jpeg";
         }
         if ("image/jpeg".equals(normalized) || "image/png".equals(normalized)
-                || "image/gif".equals(normalized) || "image/webp".equals(normalized)) {
+                || "image/gif".equals(normalized)) {
             return normalized;
         }
-        return "image/jpeg";
+        throw new IllegalArgumentException("Local images support JPEG, PNG and GIF only");
     }
 
     private String extensionFor(String contentType) {
         if ("image/png".equals(contentType)) return ".png";
         if ("image/gif".equals(contentType)) return ".gif";
-        if ("image/webp".equals(contentType)) return ".webp";
         return ".jpg";
     }
 

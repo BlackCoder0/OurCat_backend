@@ -42,4 +42,27 @@ class LocalImageStorageTest {
                 () -> storage.save(ticket.fileName, ticket.token, "image/png",
                         new ByteArrayInputStream("not-an-image".getBytes())));
     }
+
+    @Test
+    void rejectsTruncatedImageAndKeepsValidTicketAfterWrongToken() throws Exception {
+        LocalImageStorage storage = new LocalImageStorage(tempDir.toString());
+        LocalImageStorage.UploadTicket ticket = storage.prepare("image/png");
+        assertThrows(IllegalArgumentException.class, () -> storage.save(ticket.fileName, "wrong", "image/png",
+                new ByteArrayInputStream(PNG)));
+        storage.save(ticket.fileName, ticket.token, "image/png", new ByteArrayInputStream(PNG));
+        assertArrayEquals(PNG, new LocalImageStorage(tempDir.toString()).read(ticket.fileName).data);
+        LocalImageStorage.UploadTicket truncated = storage.prepare("image/png");
+        assertThrows(IllegalArgumentException.class, () -> storage.save(truncated.fileName, truncated.token,
+                "image/png", new ByteArrayInputStream(java.util.Arrays.copyOf(PNG, 8))));
+        assertThrows(IllegalArgumentException.class, () -> storage.read("../secret.png"));
+    }
+
+    @Test
+    void rejectsOversizedImagesAndUnsupportedFormats() {
+        LocalImageStorage storage = new LocalImageStorage(tempDir.toString());
+        LocalImageStorage.UploadTicket ticket = storage.prepare("image/png");
+        assertThrows(IllegalArgumentException.class, () -> storage.save(ticket.fileName, ticket.token, "image/png",
+                new ByteArrayInputStream(new byte[10 * 1024 * 1024 + 1])));
+        assertThrows(IllegalArgumentException.class, () -> storage.prepare("text/html"));
+    }
 }

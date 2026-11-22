@@ -93,8 +93,8 @@ public class DemoDataInitializer implements ApplicationRunner {
                             .content("这里的内容保存在你的本地数据库中，可以注册账号后发布和评论。")
                             .userId(author.getId()).referencedCatId(cats.get(0).getId()).build(),
                     Post.builder().title("本地演示：分享救助经验")
-                            .content("AI 识猫默认关闭；本地图片上传尚未配置。")
-                            .userId(author.getId()).referencedCatId(cats.get(1).getId()).build()));
+                            .content("AI 识猫默认关闭；上传的图片保存在本地数据目录。")
+                            .userId(author.getId()).referencedCatId(cats.get(cats.size() - 1).getId()).build()));
         }
     }
 
