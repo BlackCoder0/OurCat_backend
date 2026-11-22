@@ -44,7 +44,6 @@
 ```powershell
 git clone https://github.com/BlackCoder0/OurCat_backend.git
 cd OurCat_backend
-$env:AI_ENABLED = "false"
 mvn spring-boot:run "-Dspring-boot.run.profiles=dev"
 ```
 
@@ -56,7 +55,7 @@ curl.exe http://localhost:8080/api/auth/captcha
 
 返回内容应包含 `key` 和 `image`。
 
-> 这条命令只验证本地基础服务。开发模式使用 H2 内存数据库，**无需安装 MySQL**；OSS、天气和 AI 可以之后再配置。
+> 这条命令只验证本地基础服务。开发模式使用 H2 内存数据库，**无需安装 MySQL**；数据会在服务重启后清空。开发模式默认关闭 AI；天气仍需网络，OSS 上传需要配置自己的服务。开发 JWT 密钥只用于本地调试，不能用于生产。
 
 ---
 
@@ -66,7 +65,7 @@ curl.exe http://localhost:8080/api/auth/captcha
 
 本仓库是后端 API 服务，负责处理猫咪上报、档案、地图、社区、救助活动、任务、消息和天气等数据。
 
-AI 识猫使用 Replicate 提取图片特征。AI 不是本地基础启动条件；没有准备好 Replicate 时，将 `AI_ENABLED` 设为 `false`。
+AI 识猫使用 Replicate 提取图片特征。开发模式默认关闭 AI；配置自己的 Replicate 服务后，才在启动时启用 `AI_ENABLED`。
 
 天气功能包括无需 Key 的 Open-Meteo 查询，以及需要个人 API Host 和 JWT 的和风天气官方灾害预警。当前版本没有后台定时巡检任务。
 
@@ -192,7 +191,7 @@ backend/
     │
     └── resources/
         ├── application.yml          # 主配置（敏感值使用 ${ENV_VAR:} 占位符）
-        ├── application-dev.yml      # 开发环境（H2 内存库，开箱即用）
+        ├── application-dev.yml      # 开发调试（H2 内存库，AI 默认关闭）
         ├── application-prod.yml     # 生产环境覆盖
         └── db/migration/            # Flyway 迁移（V1 ~ V25，25 个版本）
 ```
@@ -238,7 +237,7 @@ Backend 能启动，不等于所有外部功能都已配置完成。
 | 文件 | 作用 | 是否应该写个人密钥 |
 | :--- | :--- | :--- |
 | `src/main/resources/application.yml` | 全项目的公开基础模板，提供默认值和环境变量占位符 | **不应该** |
-| `src/main/resources/application-dev.yml` | `dev` Profile 的开发覆盖配置，使用 H2 内存数据库 | 不需要 |
+| `src/main/resources/application-dev.yml` | `dev` Profile 的开发覆盖配置，使用 H2 内存数据库并关闭 AI | 仅本地调试，不用于生产 |
 | `src/main/resources/application-prod.yml` | `prod` Profile 的生产覆盖配置，使用 MySQL | 不要把密钥写死在文件里 |
 | 外部 `local/application-local.yml` | 你自己的本地私有覆盖配置，适合放数据库账号和第三方密钥 | **可以，但不能提交** |
 
@@ -276,7 +275,7 @@ url: jdbc:mysql://${DB_HOST:localhost}:3306/ourcat
 | Open-Meteo | `OURCAT_OPEN_METEO_*` | 否，默认无需 Key | 使用默认 Open-Meteo 配置 |
 | 服务端口 | `SERVER_PORT` | 否，默认 `8080` | 使用默认端口 |
 
-`AMAP_KEY` 虽然仍保留在 `application.yml` 的占位配置中，但当前主要影响 Android 端地图和定位。它不是 Backend 启动条件，Android 端的配置请看 [Android README](https://github.com/BlackCoder0/OurCat_Android)。
+`AMAP_KEY` 是 Backend 配置中的占位项，不会自动传给 Android；Android 地图 Key 单独通过 `OURCAT_AMAP_KEY_DEBUG` 或 `OURCAT_AMAP_KEY_RELEASE` 注入。它不是 Backend 启动条件，Android 端的配置请看 [Android README](https://github.com/BlackCoder0/OurCat_Android)。
 
 ### 推荐方式：环境变量
 
@@ -440,7 +439,7 @@ ourcat:
 
 ### 开发模式
 
-开发模式使用 H2 内存数据库，**不需要安装 MySQL**。没有准备 Replicate 时，请按下面的方式关闭 AI；否则 Backend 仍可能启动，但调用 AI 时会返回配置错误。开发 Profile 使用的 JWT 密钥仅用于本机调试。
+开发模式使用 H2 内存数据库，**不需要安装 MySQL**。AI 默认关闭；开发 Profile 使用的 JWT 密钥仅用于本机调试，不能用于生产环境。H2 使用内存存储，服务每次重启都会清空数据。
 
 #### 1. 确保环境就绪
 
@@ -458,17 +457,16 @@ git clone https://github.com/BlackCoder0/OurCat_backend.git
 cd OurCat_backend
 ```
 
-PowerShell（暂时关闭 AI）：
+PowerShell：
 
 ```powershell
-$env:AI_ENABLED = "false"
 mvn spring-boot:run "-Dspring-boot.run.profiles=dev"
 ```
 
-macOS/Linux（暂时关闭 AI）：
+macOS/Linux：
 
 ```bash
-AI_ENABLED=false mvn spring-boot:run -Dspring-boot.run.profiles=dev
+mvn spring-boot:run -Dspring-boot.run.profiles=dev
 ```
 
 看到 `Started OurCatApplication` 就说明跑起来了。
@@ -579,7 +577,7 @@ curl http://localhost:8080/api/auth/captcha
 | `Connection refused` | MySQL 未启动或端口不对 | `mysql -h $DB_HOST -u $DB_USERNAME -p` 测试连接 |
 | `Access denied` | 用户名或密码错误 | 检查 `DB_USERNAME` / `DB_PASSWORD` 环境变量 |
 | `Unknown database 'ourcat'` | 数据库未创建 | 执行 `CREATE DATABASE ourcat` |
-| Flyway 报错 | 迁移版本冲突 | 检查 `flyway_schema_history` 表，清理失败记录 |
+| Flyway 报错 | 迁移执行失败或数据库状态与迁移不一致 | 先检查报错 SQL 和数据库状态；修复迁移后按 Flyway 文档处理。不要直接删除迁移记录或重置非测试数据库 |
 | AI 接口报错 | 未配置 Replicate 或 Token 无效 | 检查 `AI_ENABLED`、`AI_REPLICATE_ENABLED` 和 `AI_REPLICATE_API_TOKEN` |
 | 图片上传失败 | OSS 未配置或 RAM 权限不足 | 检查 OSS Endpoint、Bucket 和 AccessKey |
 | 官方天气预警失败 | 和风 JWT 或个人 API Host 不正确 | 检查 `OURCAT_QWEATHER_JWT` 和 `OURCAT_QWEATHER_API_HOST` |
@@ -601,7 +599,7 @@ curl http://localhost:8080/api/auth/captcha
 | `/api/forum/**` | 💬 论坛 | 帖子、评论、点赞 |
 | `/api/square/**` | 📢 广场 | 广播、组织活动 |
 | `/api/message` | ✉️ 消息 | 系统通知、天气预警记录 |
-| `/api/org/**` | 🏛️ 组织 | 创建、加入、成员管理 |
+| `/api/org/**` | 🏛️ 组织 | 默认组织信息、加入申请、成员管理与申请审核 |
 | `/api/weather/**` | 🌤️ 天气 | 实时、预报、**温差/降水预警** |
 | `/api/ai/**` | 🧠 AI | **图像特征提取、相似度匹配** |
 | `/api/oss/**` | 📁 文件 | 获取上传预签名 URL |
@@ -721,11 +719,12 @@ SquarePost ─────── RescueActivity     ← 广场救助帖关联的
 
 - **当前客户端**：仅 Android（无 iOS / Web 版本）
 - **API 文档**：暂未集成 Swagger / OpenAPI，接口列表见上方 [API 速查](#api-速查)
-- **开发环境**：默认 H2 内存数据库，开箱即用
+- **开发环境**：`dev` Profile 使用 H2 内存数据库和开发专用 JWT 密钥，AI 默认关闭；数据在重启后清空
 - **生产环境**：MySQL 8.0 + Flyway 自动迁移
-- **已验证环境**：JDK 11 + Maven 3.8，H2 开发模式可编译测试
+- **已验证环境**：JDK 17.0.12 + Maven 3.6.3；H2 开发模式启动、注册、个人资料查询、无图发帖和 AI 关闭已通过本地 API 检查
+- **自动化测试**：当前没有 Java 测试源码
 - **未在本仓库复核**：MySQL 生产启动、第三方服务调用
-- **Last reviewed**：2026-08-29
+- **Last reviewed**：2026-11-22
 
 ---
 
