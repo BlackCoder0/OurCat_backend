@@ -1,0 +1,25 @@
+spring:
+  datasource:
+    url: jdbc:h2:file:${ourcat.demo.data-dir}/ourcat;MODE=MySQL;DATABASE_TO_LOWER=TRUE
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  h2:
+    console:
+      enabled: false
+  jpa:
+    hibernate:
+      ddl-auto: update
+  flyway:
+    enabled: false
+
+ourcat:
+  demo:
+    data-dir: ${OURCAT_DEMO_DATA_DIR:./data/demo}
+    admin:
+      username: ${OURCAT_DEMO_ADMIN_USERNAME:}
+      password: ${OURCAT_DEMO_ADMIN_PASSWORD:}
+  jwt:
+    secret: ${OURCAT_DEMO_JWT_SECRET:}
+  ai:
+    enabled: false

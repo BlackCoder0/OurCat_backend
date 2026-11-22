@@ -59,6 +59,31 @@ curl.exe http://localhost:8080/api/auth/captcha
 
 ---
 
+## 本地体验模式
+
+`demo` Profile 使用独立的 H2 文件数据库，预置本地示例猫咪、帖子、救助活动和默认组织；重启后会保留数据。图片上传尚未接入本地存储，此模式不配置 OSS、AI 或生产数据库。
+
+在 Backend 仓库根目录启动：
+
+```powershell
+$env:OURCAT_DEMO_JWT_SECRET = [guid]::NewGuid().ToString("N") + [guid]::NewGuid().ToString("N")
+$env:OURCAT_DEMO_DATA_DIR = "./data/demo"
+
+# 可选：需要管理本地体验实例时，首次启动前设置自己的管理员凭据
+$env:OURCAT_DEMO_ADMIN_USERNAME = "local-admin"
+$env:OURCAT_DEMO_ADMIN_PASSWORD = Read-Host "设置本地管理员密码（至少 12 位）"
+
+mvn spring-boot:run "-Dspring-boot.run.profiles=demo"
+```
+
+未设置管理员凭据时，仍可注册普通账号并浏览示例数据；如需管理员角色，在第一次启动前设置用户名和密码。已有管理员不会因重启而重置密码。`OURCAT_DEMO_DATA_DIR` 默认位于 Backend 的 `data/demo` 目录。
+
+`demo` Profile 仅允许使用本地 H2 文件数据库，且要求 AI 关闭、OSS 凭据留空，并且不能与 `dev` 或 `prod` 同时启用。模拟器 Debug APK 默认使用 `http://10.0.2.2:8080/`；实体手机需要在 Android 的 `local.properties` 中配置电脑局域网地址并重新构建。Release APK 仍要求 HTTPS。
+
+此模式用于本地开发和源码学习，尚未提供打包体验器；本地图片上传、实体手机连接和所有救助角色流程仍需进一步配置和验证。
+
+---
+
 ## 项目定位
 
 **OurCat（校园猫谱）** 是一个 **Spring Boot + Android + MySQL** 的全栈校园流浪猫救助平台。
