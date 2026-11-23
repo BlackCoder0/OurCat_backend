@@ -1,0 +1,21 @@
+name: 功能建议
+description: 说明希望解决的具体使用问题
+title: "[建议] "
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 哪种使用场景遇到了困难
+      description: 先描述要完成的操作和目前卡住的位置。
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: 建议怎样调整
+      description: 可附简短示例或草图；暂时没有方案也可以。
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 目前采用的办法
+      description: 如已有替代操作，可说明不足。

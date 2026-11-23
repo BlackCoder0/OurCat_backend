@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 已知问题与待验证项目
+    url: https://github.com/BlackCoder0/OurCat_backend/blob/main/docs/known-issues.md
+    about: 提交反馈前先检查体验版限制和当前待验证环境。

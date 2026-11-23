@@ -1,0 +1,51 @@
+name: 问题反馈
+description: 程序无法启动、操作失败或结果与预期不一致
+title: "[问题] "
+body:
+  - type: dropdown
+    id: environment
+    attributes:
+      label: 使用方式
+      options:
+        - Windows 本地体验包 + Demo APK
+        - 从源码运行 demo
+        - 普通 Debug / Release + 自建后端
+    validations:
+      required: true
+  - type: textarea
+    id: versions
+    attributes:
+      label: 版本与设备
+      description: 填写发行版本、Windows/Android 版本、使用的 APK 类型和后端版本；源码运行时附提交号。
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 怎样重现
+      placeholder: |
+        1. 从哪个页面开始
+        2. 点击或输入了什么
+        3. 哪一步出现问题
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: 预期结果与实际结果
+      description: 如果只有空白页面或无法连接，也请描述页面提示。
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 错误日志或截图
+      description: 只附相关几行日志。遮住密码、验证码、Token、姓名和个人地址；不要上传整个 data 目录或私人配置。
+  - type: checkboxes
+    id: checked
+    attributes:
+      label: 提交前检查
+      options:
+        - label: 已阅读已知问题并搜索过相似反馈
+        - label: 附件不包含登录凭据、私人配置或个人信息
+          required: true

@@ -8,25 +8,42 @@ OurCat 是采用 **Android + Spring Boot + MySQL** 实现的校园流浪猫综�
 
 本仓库提供 REST API、业务服务和数据库迁移；客户端位于 [OurCat Android](https://github.com/BlackCoder0/OurCat_Android)。公开版本需要运行各自的后端，账号和内容保存在对应实例中。
 
-**[下载 Windows 体验包与 APK](https://github.com/BlackCoder0/OurCat_backend/releases/tag/v0.1.0-local-preview.1)** · [第一次运行](docs/local-experience.md) · [API 文档](docs/api.md)
+**[下载 Windows 体验包与 APK](https://github.com/BlackCoder0/OurCat_backend/releases/tag/v0.1.0-local-preview.2)** · [第一次运行](docs/local-experience.md) · [API 文档](docs/api.md)
 
 [运行体验](#运行体验) · [功能与场景](#功能与场景) · [技术栈](#技术栈) · [系统结构](#系统结构) · [核心流程](#核心流程) · [设计亮点](#设计亮点) · [源码与文档](#源码与文档)
 
 ## 界面展示
 
+### 本地 Demo 实拍
+
+| 登录与连接 | 猫咪列表 | 上报示例位置 |
+| :---: | :---: | :---: |
+| <img src="docs/images/demo/login.png" width="230" alt="Demo 登录页与本地地址入口"> | <img src="docs/images/demo/cats.png" width="230" alt="本地示例猫咪列表"> | <img src="docs/images/demo/report.png" width="230" alt="标注上海示例位置的上报页"> |
+
+以上为本地体验版在 API 35 模拟器上的实际界面。Demo 没有真实地图和图片 AI；[完整截图与录屏说明](docs/demo-preview.md)列出可体验的内容。
+
+<p align="center"><a href="https://github.com/BlackCoder0/OurCat_backend/releases/download/v0.1.0-local-preview.2/OurCat-demo-walkthrough-preview2.mp4"><img src="docs/images/demo/demo-preview.gif" width="220" alt="本地 Demo 操作录屏节选，点击下载完整 MP4"></a></p>
+
+[下载两分钟操作演示（MP4，无声）](https://github.com/BlackCoder0/OurCat_backend/releases/download/v0.1.0-local-preview.2/OurCat-demo-walkthrough-preview2.mp4)。录屏经过剪辑，部分等待已缩短。
+
+<details>
+<summary>查看配置真实地图后的原版界面（非 Demo）</summary>
+
 | 猫咪上报 | 地图分布 | 救助活动 |
 | :---: | :---: | :---: |
 | <img src="docs/images/report-preview.jpg" width="230" alt="猫咪上报表单"> | <img src="docs/images/map-preview.jpg" width="230" alt="地图与猫咪点位"> | <img src="docs/images/rescue-preview.jpg" width="230" alt="救助活动与任务"> |
 
-截图来自已配置地图等服务的客户端。[完整界面图集](https://github.com/BlackCoder0/OurCat_Android/blob/main/docs/screenshots.md)按功能分类；下方本地体验包的地图、定位和图片 AI 有单独限制。
+截图来自已配置地图等服务的版本，完整图集见[Android 截图文档](https://github.com/BlackCoder0/OurCat_Android/blob/main/docs/screenshots.md)。
+
+</details>
 
 ## 运行体验
 
 ### 下载体验包
 
-[本地体验版 Release](https://github.com/BlackCoder0/OurCat_backend/releases/tag/v0.1.0-local-preview.1) 提供 Windows 10/11 x64 后端包和配套 Android APK。ZIP 内已包含 Java 运行时，不需要另装 JDK、Maven 或 Android Studio。
+[本地体验版 Release](https://github.com/BlackCoder0/OurCat_backend/releases/tag/v0.1.0-local-preview.2) 提供 Windows 10/11 x64 后端包和配套 Android APK。ZIP 内已包含 Java 运行时，不需要另装 JDK、Maven 或 Android Studio。
 
-1. 下载并完整解压 `OurCat-demo-windows-x64-preview1.zip`，双击 `start.cmd`。
+1. 下载并完整解压 `OurCat-demo-windows-x64-preview2.zip`，双击 `start.cmd`。
 2. 等窗口出现 `Started OurCatApplication`，把包内 `OurCat-demo.apk` 安装到安卓手机。
 3. 手机与电脑接入同一 Wi-Fi，在登录页设置电脑的局域网地址；模拟器使用 `http://10.0.2.2:8080/`。
 4. 注册普通账号，或使用 `data/login-info.txt` 中本机生成的管理员账号登录。启动窗口需要保持打开。
@@ -162,12 +179,13 @@ packaging/                       # Windows 体验包构建与启动脚本
 | [API 速查](docs/api.md) | 认证、猫咪、社区、组织、救助和图片接口 |
 | [架构与数据关系](docs/architecture.md) | 调用链、匹配规则、核心表和数据关系 |
 | [验证记录](docs/validation.md) | 测试命令、实际通过的流程与尚未验收的环境 |
+| [正式部署前回归](docs/production-regression.md) | 共享代码部署到 MySQL、OSS 和正式客户端之前的待验收范围 |
 
 ## 验证、反馈与许可
 
 已有验证包括后端 9 项测试、配套 Demo / Debug 构建，以及 API 35 模拟器的登录、头像上传、带图发帖、猫咪上报和同版本重启保留。实体手机、另一台干净 Windows 电脑、生产 MySQL / Flyway、完整角色界面和跨版本升级尚未全部验收。
 
-问题可提交到 [Issues](https://github.com/BlackCoder0/OurCat_backend/issues)，附操作步骤、版本和脱敏日志。生产凭据通过环境变量或未提交的配置文件提供。
+遇到问题可使用 [反馈模板](https://github.com/BlackCoder0/OurCat_backend/issues/new/choose)。提交前查看[已知问题](docs/known-issues.md)；文档、测试和代码修改见[贡献说明](CONTRIBUTING.md)。[新手验收清单](docs/first-run-checklist.md)供另一台电脑或实体手机继续验证。生产凭据通过环境变量或未提交的配置文件提供。
 
 代码使用 [MIT](LICENSE)。第三方 SDK 和 Java 运行时遵循各自许可证，发行包保留 `runtime/legal`。
 
